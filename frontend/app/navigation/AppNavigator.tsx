@@ -6,7 +6,7 @@ import { ActivityIndicator, Platform, StyleSheet, Text, TouchableOpacity, View }
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ArrowLeftRight, BarChart, Home, PiggyBank } from 'lucide-react-native';
+import { ArrowLeftRight, BarChart, Home, PiggyBank, Settings as SettingsIcon, Wallet as WalletIcon } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
@@ -16,8 +16,10 @@ import LoginScreen from '../(auth)/LoginScreen';
 import RegisterScreen from '../(auth)/RegisterScreen';
 import HomeScreen from '../(app)/HomeScreen';
 import TransactionScreen from '../(app)/TransactionScreen';
+import WalletsScreen from '../(app)/WalletsScreen';
 import BudgetsScreen from '../(app)/BudgetsScreen';
 import AnalyticsScreen from '../(app)/AnalyticsScreen';
+import SettingsScreen from '../(app)/SettingsScreen';
 import PrimaryButton from '../../components/common/buttons/PrimaryButton';
 
 export type AuthStackParamList = {
@@ -29,8 +31,10 @@ export type AuthStackParamList = {
 export type AppTabParamList = {
   Home: undefined;
   Transactions: undefined;
+  Wallets: undefined;
   Budgets: undefined;
   Analytics: undefined;
+  Settings: undefined;
 };
 
 const AuthStack = createStackNavigator<AuthStackParamList>();
@@ -96,16 +100,21 @@ function AppTabNavigator() {
         tabBarIcon: ({ color }) => {
           if (route.name === 'Home') return <Home size={22} color={color} />;
           if (route.name === 'Transactions') return <ArrowLeftRight size={22} color={color} />;
+          if (route.name === 'Wallets') return <WalletIcon size={22} color={color} />;
           if (route.name === 'Budgets') return <PiggyBank size={22} color={color} />;
           if (route.name === 'Analytics') return <BarChart size={22} color={color} />;
+          if (route.name === 'Settings') return <SettingsIcon size={22} color={color} />;
           return null;
         },
+        animation: 'none',
       })}
     >
       <AppTabs.Screen name="Home" component={HomeScreen} />
       <AppTabs.Screen name="Transactions" component={TransactionScreen} options={{ tabBarLabel: 'Transactions' }} />
+      <AppTabs.Screen name="Wallets" component={WalletsScreen} options={{ tabBarLabel: 'Wallets' }} />
       <AppTabs.Screen name="Budgets" component={BudgetsScreen} options={{ tabBarLabel: 'Budgets' }} />
       <AppTabs.Screen name="Analytics" component={AnalyticsScreen} options={{ tabBarLabel: 'Analytics' }} />
+      <AppTabs.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabel: 'Settings' }} />
     </AppTabs.Navigator>
   );
 }

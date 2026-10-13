@@ -8,10 +8,9 @@ import type { Category } from '../types/Category';
 import type { Wallet } from '../types/Wallet';
 import type { User, ExportDataPayload } from '../types/User';
 import { defaultCategories } from '../constants/defaultCategories';
-import { defaultWallet } from '../utils/dummyData';
 
 const DB_NAME = 'bankoni.db';
-const DATABASE_VERSION = 2;
+const DATABASE_VERSION = 3;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initPromise: Promise<void> | null = null;
@@ -66,9 +65,13 @@ interface WalletRow {
     id: string;
     name: string;
     icon: string;
+    provider_id: string | null;
+    opening_balance: number | null;
     balance: number;
     currency: string;
+    account_number_last4: string | null;
     is_default: number;
+    is_archived: number | null;
     created_at: string;
 }
 
@@ -121,9 +124,13 @@ const SCHEMA_SQL = `
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
     icon TEXT NOT NULL,
+    provider_id TEXT NOT NULL DEFAULT 'custom',
+    opening_balance REAL NOT NULL DEFAULT 0.0,
     balance REAL NOT NULL DEFAULT 0.0,
     currency TEXT NOT NULL DEFAULT 'ETB',
+    account_number_last4 TEXT,
     is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0, 1)),
+    is_archived INTEGER NOT NULL DEFAULT 0 CHECK (is_archived IN (0, 1)),
     created_at TEXT NOT NULL
   );
 
@@ -262,6 +269,10 @@ async function initializeDatabase(): Promise<void> {
             await reconcileWalletBalances(tx);
         }
 
+        if (previousVersion < 3) {
+            await migrateToVersion3(tx);
+        }
+
         await seedInitialData(tx);
         await tx.execAsync(
             'CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_single_default ON wallets(is_default) WHERE is_default = 1;',
@@ -295,16 +306,20 @@ async function seedInitialData(db: SQLite.SQLiteDatabase): Promise<void> {
         'SELECT COUNT(*) AS count FROM wallets;',
     );
     if ((walletCount?.count ?? 0) === 0) {
+        const now = new Date().toISOString();
         await db.runAsync(
-            `INSERT INTO wallets (id, name, icon, balance, currency, is_default, created_at)
-       VALUES (?, ?, ?, ?, ?, 1, ?);`,
+            `INSERT INTO wallets
+        (id, name, icon, provider_id, opening_balance, balance, currency, account_number_last4, is_default, is_archived, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 1, 0, ?);`,
             [
-                defaultWallet.id,
-                defaultWallet.name,
-                defaultWallet.icon,
-                Number(defaultWallet.balance) || 0,
-                defaultWallet.currency || 'ETB',
-                defaultWallet.createdAt || new Date().toISOString(),
+                'wallet-cash-default',
+                'Cash',
+                'banknote',
+                'cash',
+                0.0,
+                0.0,
+                'ETB',
+                now,
             ],
         );
     } else {
@@ -345,6 +360,64 @@ async function reconcileWalletBalances(db: SQLite.SQLiteDatabase): Promise<void>
         if (Number.isFinite(net) && net !== 0) {
             await db.runAsync('UPDATE wallets SET balance = balance + ? WHERE id = ?;', [net, row.wallet_id]);
         }
+    }
+}
+
+async function migrateToVersion3(db: SQLite.SQLiteDatabase): Promise<void> {
+    // 1. Ensure new wallet columns exist (idempotent ALTER TABLE checks)
+    const tableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(wallets);');
+    const existingCols = new Set(tableInfo.map((col) => col.name.toLowerCase()));
+
+    if (!existingCols.has('provider_id')) {
+        await db.runAsync("ALTER TABLE wallets ADD COLUMN provider_id TEXT NOT NULL DEFAULT 'custom';");
+    }
+    if (!existingCols.has('opening_balance')) {
+        await db.runAsync('ALTER TABLE wallets ADD COLUMN opening_balance REAL NOT NULL DEFAULT 0.0;');
+    }
+    if (!existingCols.has('account_number_last4')) {
+        await db.runAsync('ALTER TABLE wallets ADD COLUMN account_number_last4 TEXT;');
+    }
+    if (!existingCols.has('is_archived')) {
+        await db.runAsync('ALTER TABLE wallets ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;');
+    }
+
+    // 2. Identify all wallets and reconcile with the strict balance invariant:
+    //    balance = opening_balance + sum(cleared credits) - sum(cleared debits)
+    //    For the known legacy seeded wallet ('wallet-1'), the hardcoded ETB 12,450
+    //    starting balance was fabricated; set its legitimate opening_balance to 0.0
+    //    and recompute its balance solely from real user transactions.
+    const wallets = await db.getAllAsync<{ id: string; name: string; balance: number; opening_balance: number | null }>(
+        'SELECT id, name, balance, opening_balance FROM wallets;',
+    );
+
+    for (const w of wallets) {
+        const netRow = await db.getFirstAsync<{ net: number | null }>(`
+            SELECT SUM(CASE
+                WHEN status <> 'CLEARED' THEN 0
+                WHEN type = 'CREDIT' THEN amount
+                ELSE -amount
+            END) AS net
+            FROM transactions
+            WHERE wallet_id = ?;
+        `, [w.id]);
+        const netTransactions = Number(netRow?.net ?? 0);
+
+        let legitimateOpening = Number(w.opening_balance ?? 0);
+
+        if (w.id === 'wallet-1' || w.id === 'wallet-cash-default') {
+            legitimateOpening = 0.0;
+            await db.runAsync(
+                "UPDATE wallets SET provider_id = 'cash' WHERE id = ? AND (provider_id = 'custom' OR provider_id IS NULL);",
+                [w.id],
+            );
+        }
+
+        const reconciledBalance = legitimateOpening + netTransactions;
+
+        await db.runAsync(
+            'UPDATE wallets SET opening_balance = ?, balance = ? WHERE id = ?;',
+            [legitimateOpening, reconciledBalance, w.id],
+        );
     }
 }
 
@@ -408,9 +481,13 @@ function mapWallet(row: WalletRow): Wallet {
         id: row.id,
         name: row.name,
         icon: row.icon,
-        balance: Number(row.balance),
+        providerId: row.provider_id || 'custom',
+        openingBalance: Number(row.opening_balance ?? 0),
+        balance: Number(row.balance ?? 0),
         currency: row.currency,
+        accountNumberLast4: row.account_number_last4 || undefined,
         isDefault: Boolean(row.is_default),
+        isArchived: Boolean(row.is_archived),
         createdAt: row.created_at,
     };
 }
@@ -536,6 +613,32 @@ export async function setBiometricEnabledDB(userId: string, enabled: boolean): P
         [enabled ? 1 : 0, userId],
     );
     if (result.changes !== 1) throw new Error('The vault profile could not be updated.');
+}
+export async function updateUserProfileDB(userId: string, name: string, email?: string,): Promise<void> {
+    const cleanName = name.trim();
+    const cleanEmail = email?.trim() || null;
+
+    if (!cleanName) {
+        throw new Error('Name is required.');
+    }
+
+    if (
+        cleanEmail &&
+        !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
+    ) {
+        throw new Error('Enter a valid email address.');
+    }
+
+    const db = await getDatabase();
+
+    const result = await db.runAsync(
+        'UPDATE users SET name = ?, email = ? WHERE id = ?;',
+        [cleanName, cleanEmail, userId],
+    );
+
+    if (result.changes !== 1) {
+        throw new Error('The local vault profile could not be updated.');
+    }
 }
 
 // Local PIN attempt controls. These slow online guessing through the app; they
@@ -825,26 +928,132 @@ export async function deleteCategoryDB(id: string): Promise<void> {
     });
 }
 
-export async function getWalletsDB(): Promise<Wallet[]> {
+export async function getWalletsDB(includeArchived: boolean = true): Promise<Wallet[]> {
     const db = await getDatabase();
-    const rows = await db.getAllAsync<WalletRow>(
-        'SELECT * FROM wallets ORDER BY is_default DESC, created_at ASC;',
-    );
+    const query = includeArchived
+        ? 'SELECT * FROM wallets ORDER BY is_archived ASC, is_default DESC, created_at ASC;'
+        : 'SELECT * FROM wallets WHERE is_archived = 0 ORDER BY is_default DESC, created_at ASC;';
+    const rows = await db.getAllAsync<WalletRow>(query);
     return rows.map(mapWallet);
 }
 
 export async function insertWalletDB(wallet: Wallet): Promise<void> {
     if (!wallet.name.trim()) throw new Error('Wallet name is required.');
     if (!wallet.currency.trim()) throw new Error('Wallet currency is required.');
+    if (!Number.isFinite(wallet.openingBalance)) throw new Error('Opening balance must be a finite number.');
     if (!Number.isFinite(wallet.balance)) throw new Error('Wallet balance must be a finite number.');
 
     await withExclusiveTransaction(async (db) => {
         if (wallet.isDefault) await db.runAsync('UPDATE wallets SET is_default = 0;');
         await db.runAsync(
-            `INSERT INTO wallets (id, name, icon, balance, currency, is_default, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?);`,
-            [wallet.id, wallet.name.trim(), wallet.icon, wallet.balance, wallet.currency, wallet.isDefault ? 1 : 0, wallet.createdAt],
+            `INSERT INTO wallets
+        (id, name, icon, provider_id, opening_balance, balance, currency, account_number_last4, is_default, is_archived, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+            [
+                wallet.id,
+                wallet.name.trim(),
+                wallet.icon,
+                wallet.providerId || 'custom',
+                wallet.openingBalance,
+                wallet.balance,
+                wallet.currency.trim().toUpperCase(),
+                wallet.accountNumberLast4?.trim() || null,
+                wallet.isDefault ? 1 : 0,
+                wallet.isArchived ? 1 : 0,
+                wallet.createdAt,
+            ],
         );
+    });
+}
+
+export async function updateWalletDB(
+    id: string,
+    updated: Partial<Omit<Wallet, 'id' | 'createdAt'>>,
+): Promise<void> {
+    await withExclusiveTransaction(async (db) => {
+        const current = await db.getFirstAsync<WalletRow>('SELECT * FROM wallets WHERE id = ?;', [id]);
+        if (!current) throw new Error('Wallet not found.');
+
+        const mapped = mapWallet(current);
+
+        const newName = updated.name !== undefined ? updated.name.trim() : mapped.name;
+        if (!newName) throw new Error('Wallet name is required.');
+
+        const newCurrency = updated.currency !== undefined ? updated.currency.trim().toUpperCase() : mapped.currency;
+        if (!newCurrency) throw new Error('Wallet currency is required.');
+
+        const newProviderId = updated.providerId !== undefined ? updated.providerId : mapped.providerId;
+        const newIcon = updated.icon !== undefined ? updated.icon : mapped.icon;
+        const newLast4 = updated.accountNumberLast4 !== undefined ? (updated.accountNumberLast4?.trim() || null) : (mapped.accountNumberLast4 || null);
+        const newIsArchived = updated.isArchived !== undefined ? updated.isArchived : mapped.isArchived;
+
+        // If opening balance changed: recalculate balance strictly using the invariant!
+        let newOpeningBalance = mapped.openingBalance;
+        let newBalance = mapped.balance;
+
+        if (updated.openingBalance !== undefined) {
+            if (!Number.isFinite(updated.openingBalance)) throw new Error('Opening balance must be a finite number.');
+            newOpeningBalance = updated.openingBalance;
+
+            const netRow = await db.getFirstAsync<{ net: number | null }>(`
+                SELECT SUM(CASE
+                    WHEN status <> 'CLEARED' THEN 0
+                    WHEN type = 'CREDIT' THEN amount
+                    ELSE -amount
+                END) AS net
+                FROM transactions
+                WHERE wallet_id = ?;
+            `, [id]);
+            const net = Number(netRow?.net ?? 0);
+            newBalance = newOpeningBalance + net;
+        }
+
+        if (updated.isDefault) {
+            await db.runAsync('UPDATE wallets SET is_default = 0;');
+        }
+
+        const isDefaultVal = updated.isDefault !== undefined ? (updated.isDefault ? 1 : 0) : current.is_default;
+
+        await db.runAsync(
+            `UPDATE wallets
+             SET name = ?, icon = ?, provider_id = ?, opening_balance = ?, balance = ?, currency = ?, account_number_last4 = ?, is_default = ?, is_archived = ?
+             WHERE id = ?;`,
+            [
+                newName,
+                newIcon,
+                newProviderId,
+                newOpeningBalance,
+                newBalance,
+                newCurrency,
+                newLast4,
+                isDefaultVal,
+                newIsArchived ? 1 : 0,
+                id,
+            ],
+        );
+    });
+}
+
+export async function setDefaultWalletDB(id: string): Promise<void> {
+    await withExclusiveTransaction(async (db) => {
+        const wallet = await db.getFirstAsync<{ id: string; is_archived: number }>('SELECT id, is_archived FROM wallets WHERE id = ?;', [id]);
+        if (!wallet) throw new Error('Wallet not found.');
+        if (Boolean(wallet.is_archived)) throw new Error('Cannot set an archived wallet as default.');
+
+        await db.runAsync('UPDATE wallets SET is_default = 0;');
+        await db.runAsync('UPDATE wallets SET is_default = 1 WHERE id = ?;', [id]);
+    });
+}
+
+export async function archiveWalletDB(id: string, isArchived: boolean): Promise<void> {
+    await withExclusiveTransaction(async (db) => {
+        const wallet = await db.getFirstAsync<{ is_default: number }>('SELECT is_default FROM wallets WHERE id = ?;', [id]);
+        if (!wallet) throw new Error('Wallet not found.');
+        if (isArchived && Boolean(wallet.is_default)) {
+            throw new Error('The default wallet cannot be archived. Set another wallet as default first.');
+        }
+
+        await db.runAsync('UPDATE wallets SET is_archived = ? WHERE id = ?;', [isArchived ? 1 : 0, id]);
     });
 }
 
@@ -854,13 +1063,13 @@ export async function deleteWalletDB(id: string): Promise<void> {
             'SELECT is_default FROM wallets WHERE id = ?;', [id],
         );
         if (!wallet) return;
-        if (Boolean(wallet.is_default)) throw new Error('The default wallet cannot be deleted.');
+        if (Boolean(wallet.is_default)) throw new Error('The default wallet cannot be deleted. Set another wallet as default first.');
 
         const count = await db.getFirstAsync<{ count: number }>(
             'SELECT COUNT(*) AS count FROM transactions WHERE wallet_id = ?;', [id],
         );
         if ((count?.count ?? 0) > 0) {
-            throw new Error('This wallet contains transactions. Reassign or remove those transactions before deleting it.');
+            throw new Error('This wallet contains transactions. Archive it instead, or delete its transactions before removing it.');
         }
         await db.runAsync('DELETE FROM wallets WHERE id = ?;', [id]);
     });

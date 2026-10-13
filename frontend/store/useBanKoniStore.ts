@@ -31,12 +31,16 @@ import {
     deleteCategoryDB,
     getWalletsDB,
     insertWalletDB,
+    updateWalletDB,
+    setDefaultWalletDB,
+    archiveWalletDB,
     deleteWalletDB,
     exportDatabaseToJSON,
     updateUserPinHashDB,
     getPinAttemptStateDB,
     recordFailedPinAttemptDB,
     resetPinAttemptStateDB,
+    updateUserProfileDB,
 } from '../db/database';
 
 export type BiometricLoginResult =
@@ -78,7 +82,7 @@ interface BanKoniStore {
     fetchTransactions: () => Promise<void>;
     fetchBudgets: () => Promise<void>;
     fetchCategories: () => Promise<void>;
-    fetchWallets: () => Promise<void>;
+    fetchWallets: (includeArchived?: boolean) => Promise<void>;
 
     // Transaction CRUD
     addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'> | Transaction) => Promise<void>;
@@ -93,7 +97,10 @@ interface BanKoniStore {
     // Category and wallet CRUD
     addCategory: (category: Omit<Category, 'id'>) => Promise<void>;
     deleteCategory: (id: string) => Promise<void>;
-    addWallet: (wallet: Omit<Wallet, 'id' | 'createdAt'>) => Promise<void>;
+    addWallet: (wallet: Omit<Wallet, 'id' | 'createdAt' | 'balance'> & { balance?: number }) => Promise<void>;
+    updateWallet: (id: string, updated: Partial<Omit<Wallet, 'id' | 'createdAt'>>) => Promise<void>;
+    setDefaultWallet: (id: string) => Promise<void>;
+    archiveWallet: (id: string, isArchived: boolean) => Promise<void>;
     deleteWallet: (id: string) => Promise<void>;
 
     // Export
@@ -106,6 +113,10 @@ interface BanKoniStore {
     totalBalance: () => number;
     transactionByCategory: () => Record<string, number>;
 
+    // settings
+    updateProfile: (name: string, email?: string) => Promise<void>;
+
+    changePin: (currentPin: string, newPin: string,) => Promise<void>;
     // Theme
     toggleTheme: () => void;
 }
@@ -333,11 +344,14 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         }
 
         await setBiometricEnabledDB(user.id, enabled);
-        const updatedUser = { ...user, isBiometricEnabled: enabled };
+        const updatedUser = {
+            ...user,
+            isBiometricEnabled: enabled,
+        };
+
         set({
             user: updatedUser,
-            registeredUser: get().registeredUser?.id === user.id ? updatedUser : get().registeredUser,
-            isBiometricSupported: enabled ? true : get().isBiometricSupported,
+            registeredUser: updatedUser,
         });
     },
 
@@ -391,7 +405,7 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
     fetchTransactions: async () => set({ transactions: await getTransactionsDB() }),
     fetchBudgets: async () => set({ budgets: await getBudgetsDB() }),
     fetchCategories: async () => set({ categories: await getCategoriesDB() }),
-    fetchWallets: async () => set({ wallets: await getWalletsDB() }),
+    fetchWallets: async (includeArchived?: boolean) => set({ wallets: await getWalletsDB(includeArchived ?? true) }),
 
     addTransaction: async (tx) => {
         const fullTransaction: Transaction = {
@@ -450,10 +464,100 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         const fullWallet: Wallet = {
             ...wallet,
             id: makeId('wallet'),
+            providerId: wallet.providerId || 'custom',
+            openingBalance: wallet.openingBalance ?? 0,
+            balance: wallet.openingBalance ?? 0,
+            isArchived: wallet.isArchived ?? false,
             createdAt: new Date().toISOString(),
         };
         await insertWalletDB(fullWallet);
         set({ wallets: await getWalletsDB() });
+    },
+
+    updateWallet: async (id, updated) => {
+        await updateWalletDB(id, updated);
+        const data = await readTransactionsAndWallets();
+        set({ wallets: data.wallets });
+    },
+
+    setDefaultWallet: async (id) => {
+        await setDefaultWalletDB(id);
+        set({ wallets: await getWalletsDB() });
+    },
+
+    archiveWallet: async (id, isArchived) => {
+        await archiveWalletDB(id, isArchived);
+        set({ wallets: await getWalletsDB() });
+    },
+
+    updateProfile: async (name, email) => {
+        const currentUser = get().user;
+
+        if (!currentUser) {
+            throw new Error('Unlock BanKoni before editing your profile.');
+        }
+
+        const cleanName = name.trim();
+        const cleanEmail = email?.trim() || undefined;
+
+        if (!cleanName) {
+            throw new Error('Name is required.');
+        }
+
+        if (
+            cleanEmail &&
+            !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)
+        ) {
+            throw new Error('Enter a valid email address.');
+        }
+
+        // Commit the change to SQLite before updating the UI.
+        await updateUserProfileDB(
+            currentUser.id,
+            cleanName,
+            cleanEmail,
+        );
+
+        const updatedUser = {
+            ...currentUser,
+            name: cleanName,
+            email: cleanEmail,
+        };
+
+        // Keep the active and login-screen profile copies consistent.
+        set({
+            user: updatedUser,
+            registeredUser: updatedUser,
+        });
+    },
+
+    changePin: async (currentPin, newPin) => {
+        if (!validateNewPin(newPin)) {
+            throw new Error('The new PIN must contain 6–12 numeric digits.');
+        }
+
+        if (currentPin === newPin) {
+            throw new Error('Choose a different PIN.');
+        }
+
+        const active = await getActiveUserDB();
+
+        if (!active) {
+            throw new Error('No local vault was found.');
+        }
+
+        const validCurrentPin = await verifyPin(
+            currentPin,
+            active.pinHash,
+        );
+
+        if (!validCurrentPin) {
+            throw new Error('The current PIN is incorrect.');
+        }
+
+        const newHash = await hashPin(newPin);
+
+        await updateUserPinHashDB(active.user.id, newHash);
     },
 
     deleteWallet: async (id) => {
@@ -501,7 +605,7 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
     ),
 
     totalBalance: () => get().wallets
-        .filter((wallet) => wallet.currency === 'ETB')
+        .filter((wallet) => wallet.currency === 'ETB' && !wallet.isArchived)
         .reduce((sum, wallet) => sum + wallet.balance, 0),
 
     transactionByCategory: () => getEtbClearedTransactions(get()).reduce<Record<string, number>>(
