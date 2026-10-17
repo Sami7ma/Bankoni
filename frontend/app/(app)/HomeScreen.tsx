@@ -1,10 +1,9 @@
 // app/(app)/HomeScreen.tsx
 // The main dashboard — the first screen users see after logging in.
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { Sun, Moon } from 'lucide-react-native';
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import { useRef, useState } from 'react';
@@ -22,8 +21,6 @@ export default function HomeScreen() {
     const totalBalance = useBanKoniStore((state) => state.totalBalance);
     const totalIncome = useBanKoniStore((state) => state.totalIncome);
     const totalExpenses = useBanKoniStore((state) => state.totalExpenses);
-    const toggleTheme = useBanKoniStore((state) => state.toggleTheme);
-    const theme = useBanKoniStore((state) => state.theme);
     const cardsRef = useRef<BalanceCardsRef>(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [modalType, setModalType] = useState<'CREDIT' | 'DEBIT'>('DEBIT');
@@ -52,15 +49,8 @@ export default function HomeScreen() {
                         </Text>
                     </View>
 
-                    {/* Actions: Theme Toggle + Padlock Logout */}
+                    {/* Actions: Padlock Logout */}
                     <View style={styles.headerActions}>
-                        <TouchableOpacity style={styles.toggleButton} onPress={() => { toggleTheme() }}>
-                            {theme === 'dark'
-                                ? <Sun size={22} color={colors.champagne} />
-                                : <Moon size={22} color={colors.champagne} />
-                            }
-                        </TouchableOpacity>
-
                         <LogoutButton />
                     </View>
                 </View>
@@ -156,13 +146,5 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         fontSize: 16,
         fontWeight: 'bold',
         color: colors.textPrimary
-    },
-    toggleButton: {
-        width: 40,
-        height: 40,
-        borderRadius: 50,
-        backgroundColor: colors.surface,
-        alignItems: 'center',
-        justifyContent: 'center',
     },
 });

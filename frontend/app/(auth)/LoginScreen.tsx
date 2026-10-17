@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -123,6 +124,11 @@ export default function LoginScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
+          <Image
+            source={require('../../assets/BankoniDrawerNObaground.png')}
+            style={styles.drawerLogo}
+            resizeMode="contain"
+          />
           <Text style={styles.logo}>BanKoni</Text>
           <Text style={styles.tagline}>Welcome Back</Text>
           <Text style={styles.userBadge}>{displayName}</Text>
@@ -216,6 +222,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
     paddingVertical: 40,
   },
   header: { marginBottom: 32, alignItems: 'center' },
+  drawerLogo: {
+    width: 130,
+    height: 100,
+    marginBottom: 10,
+  },
   logo: {
     fontSize: 40,
     fontWeight: '700',

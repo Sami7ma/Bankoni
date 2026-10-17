@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import {
   Alert,
+  Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
@@ -110,6 +111,11 @@ export default function RegisterScreen({ navigation }: Props) {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.header}>
+          <Image
+            source={require('../../assets/BankoniDrawerNObaground.png')}
+            style={styles.drawerLogo}
+            resizeMode="contain"
+          />
           <Text style={styles.logo}>BanKoni</Text>
           <Text style={styles.tagline}>Create Your Local Vault</Text>
           <Text style={styles.headerSubtitle}>Your records stay on this device.</Text>
@@ -252,6 +258,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
   container: { flex: 1, backgroundColor: colors.background },
   scrollContent: { flexGrow: 1, paddingHorizontal: 20, paddingTop: 38, paddingBottom: 32 },
   header: { marginBottom: 20, alignItems: 'center' },
+  drawerLogo: {
+    width: 110,
+    height: 85,
+    marginBottom: 8,
+  },
   logo: { fontSize: 36, fontWeight: '700', color: colors.champagne, letterSpacing: 1.5 },
   tagline: { fontSize: 21, fontWeight: '700', color: colors.textPrimary, marginTop: 5 },
   headerSubtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 6, textAlign: 'center' },

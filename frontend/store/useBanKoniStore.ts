@@ -3,8 +3,10 @@
 
 
 import { create } from 'zustand';
+import { Appearance } from 'react-native';
 import * as Crypto from 'expo-crypto';
 import * as LocalAuthentication from 'expo-local-authentication';
+import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { hashPin, verifyPin, isCurrentPinHash, validateNewPin } from '../security/pinSecurity';
@@ -118,7 +120,8 @@ interface BanKoniStore {
 
     changePin: (currentPin: string, newPin: string,) => Promise<void>;
     // Theme
-    toggleTheme: () => void;
+    setTheme: (theme: 'light' | 'dark') => Promise<void>;
+    toggleTheme: () => Promise<void>;
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -165,7 +168,7 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
     categories: [],
     budgets: [],
     wallets: [],
-    theme: 'light',
+    theme: (Appearance.getColorScheme() === 'dark' ? 'dark' : 'light') as 'light' | 'dark',
 
     // Discover the vault and device capabilities. A single screen owns the actual
     // biometric prompt, preventing simultaneous prompts at startup and on Login.
@@ -188,6 +191,19 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
             ]);
             const active = await getActiveUserDB();
 
+            // Restore user's saved theme preference if present, otherwise default to device theme
+            try {
+                const savedTheme = await SecureStore.getItemAsync('bankoni_theme');
+                if (savedTheme === 'light' || savedTheme === 'dark') {
+                    set({ theme: savedTheme });
+                } else {
+                    const sysTheme = Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
+                    set({ theme: sysTheme });
+                }
+            } catch {
+                // Ignore storage failure on theme
+            }
+
             set({
                 registeredUser: active?.user ?? null,
                 isBiometricSupported: hasHardware && enrolled,
@@ -208,7 +224,7 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         const cleanName = name.trim();
         const cleanEmail = email?.trim() || undefined;
         if (cleanName.length < 2) throw new Error('Name must contain at least 2 characters.');
-        if (!validateNewPin(pin)) throw new Error('PIN must contain 6 to 12 numeric digits.');
+        if (!validateNewPin(pin)) throw new Error('PIN must contain 4 to 12 numeric digits.');
         if (cleanEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(cleanEmail)) {
             throw new Error('Enter a valid email address or leave it empty.');
         }
@@ -533,7 +549,7 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
 
     changePin: async (currentPin, newPin) => {
         if (!validateNewPin(newPin)) {
-            throw new Error('The new PIN must contain 6–12 numeric digits.');
+            throw new Error('The new PIN must contain 4–12 numeric digits.');
         }
 
         if (currentPin === newPin) {
@@ -618,7 +634,24 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         {},
     ),
 
-    toggleTheme: () => set((state) => ({ theme: state.theme === 'light' ? 'dark' : 'light' })),
+    setTheme: async (newTheme) => {
+        set({ theme: newTheme });
+        try {
+            await SecureStore.setItemAsync('bankoni_theme', newTheme);
+        } catch {
+            // Ignore
+        }
+    },
+
+    toggleTheme: async () => {
+        const nextTheme = get().theme === 'light' ? 'dark' : 'light';
+        set({ theme: nextTheme });
+        try {
+            await SecureStore.setItemAsync('bankoni_theme', nextTheme);
+        } catch {
+            // Ignore
+        }
+    },
 }));
 
 export default useBanKoniStore;

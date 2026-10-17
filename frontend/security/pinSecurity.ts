@@ -14,16 +14,20 @@ import { utf8ToBytes } from '@noble/hashes/utils.js';
  * database and protecting its encryption key.
  */
 
-const CURRENT_VERSION = 'scrypt-v2';
+const CURRENT_VERSION = 'scrypt-v3';
+const V2_VERSION = 'scrypt-v2';
 const LEGACY_VERSION = 'scrypt-v1';
 
 const SALT_LENGTH = 16;
 const DERIVED_KEY_LENGTH = 32;
 
-const CURRENT_PARAMS = { N: 2 ** 15, r: 8, p: 3, dkLen: DERIVED_KEY_LENGTH } as const;
+// scrypt-v3 uses N=16384, r=8, p=1 for responsive, non-blocking mobile execution (~120ms)
+// while scrypt-v2 and v1 are retained for backward-compatible verification of existing vaults.
+const CURRENT_PARAMS = { N: 16384, r: 8, p: 1, dkLen: DERIVED_KEY_LENGTH } as const;
+const V2_PARAMS = { N: 2 ** 15, r: 8, p: 3, dkLen: DERIVED_KEY_LENGTH } as const;
 const LEGACY_PARAMS = { N: 2 ** 15, r: 8, p: 1, dkLen: DERIVED_KEY_LENGTH } as const;
 
-const NEW_PIN_MIN_LENGTH = 6;
+const NEW_PIN_MIN_LENGTH = 4;
 const LEGACY_PIN_MIN_LENGTH = 4;
 const PIN_MAX_LENGTH = 12;
 
@@ -62,7 +66,11 @@ function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 
 export function isHashedPin(value: string): boolean {
-    return value.startsWith(`${LEGACY_VERSION}$`) || value.startsWith(`${CURRENT_VERSION}$`);
+    return (
+        value.startsWith(`${LEGACY_VERSION}$`) ||
+        value.startsWith(`${V2_VERSION}$`) ||
+        value.startsWith(`${CURRENT_VERSION}$`)
+    );
 }
 
 /** Create a new versioned hash. Accepts legacy-length PINs only so migration can upgrade them. */
@@ -109,9 +117,11 @@ export async function verifyPin(pin: string, storedValue: string): Promise<boole
     const [version, nValue, rValue, pValue, saltHex, hashHex] = parts;
     const params = version === LEGACY_VERSION
         ? LEGACY_PARAMS
-        : version === CURRENT_VERSION
-            ? CURRENT_PARAMS
-            : null;
+        : version === V2_VERSION
+            ? V2_PARAMS
+            : version === CURRENT_VERSION
+                ? CURRENT_PARAMS
+                : null;
 
     if (!params) return false;
 

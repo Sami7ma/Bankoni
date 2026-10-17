@@ -58,6 +58,7 @@ export default function SettingsScreen() {
         (state) => state.isBiometricSupported,
     );
     const theme = useBanKoniStore((state) => state.theme);
+    const setTheme = useBanKoniStore((state) => state.setTheme);
     const toggleTheme = useBanKoniStore((state) => state.toggleTheme);
     const exportDataToJSONFile = useBanKoniStore(
         (state) => state.exportDataToJSONFile,
@@ -125,7 +126,7 @@ export default function SettingsScreen() {
         if (!currentPin.trim() || !validateNewPin(newPin)) {
             Alert.alert(
                 'Check your PIN',
-                'Enter your current PIN and choose a new PIN of 6–12 numeric digits.',
+                'Enter your current PIN and choose a new PIN of 4–12 numeric digits.',
             );
             return;
         }
@@ -407,28 +408,65 @@ export default function SettingsScreen() {
                     'Appearance and financial defaults',
                     <SlidersHorizontal size={22} color={colors.champagne} />,
                     <>
-                        <View style={styles.preferenceRow}>
-                            {theme === 'dark' ? (
-                                <Moon size={21} color={colors.champagne} />
-                            ) : (
-                                <Sun size={21} color={colors.champagne} />
-                            )}
-                            <View style={styles.preferenceText}>
-                                <Text style={styles.rowTitle}>Dark theme</Text>
+                        <View style={styles.themeSelectorContainer}>
+                            <View style={styles.themeSelectorHeader}>
+                                <Text style={styles.rowTitle}>Theme</Text>
                                 <Text style={styles.infoText}>
-                                    Change BanKoni's appearance.
+                                    Select your preferred appearance mode.
                                 </Text>
                             </View>
-                            <Switch
-                                value={theme === 'dark'}
-                                onValueChange={toggleTheme}
-                                trackColor={{
-                                    false: colors.border,
-                                    true: colors.champagne,
-                                }}
-                                thumbColor="#FFFFFF"
-                                accessibilityLabel="Enable dark theme"
-                            />
+
+                            <View style={styles.themeSegmentRow}>
+                                <TouchableOpacity
+                                    style={[
+                                        styles.themeSegmentButton,
+                                        theme === 'light' && styles.themeSegmentButtonActive,
+                                    ]}
+                                    onPress={() => setTheme('light')}
+                                    activeOpacity={0.75}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Light theme"
+                                    accessibilityState={{ selected: theme === 'light' }}
+                                >
+                                    <Sun
+                                        size={18}
+                                        color={theme === 'light' ? colors.champagne : colors.textSecondary}
+                                    />
+                                    <Text
+                                        style={[
+                                            styles.themeSegmentText,
+                                            theme === 'light' && styles.themeSegmentTextActive,
+                                        ]}
+                                    >
+                                        Light
+                                    </Text>
+                                </TouchableOpacity>
+
+                                <TouchableOpacity
+                                    style={[
+                                        styles.themeSegmentButton,
+                                        theme === 'dark' && styles.themeSegmentButtonActive,
+                                    ]}
+                                    onPress={() => setTheme('dark')}
+                                    activeOpacity={0.75}
+                                    accessibilityRole="button"
+                                    accessibilityLabel="Dark theme"
+                                    accessibilityState={{ selected: theme === 'dark' }}
+                                >
+                                    <Moon
+                                        size={18}
+                                        color={theme === 'dark' ? colors.champagne : colors.textSecondary}
+                                    />
+                                    <Text
+                                        style={[
+                                            styles.themeSegmentText,
+                                            theme === 'dark' && styles.themeSegmentTextActive,
+                                        ]}
+                                    >
+                                        Dark
+                                    </Text>
+                                </TouchableOpacity>
+                            </View>
                         </View>
 
                         <View style={styles.separator} />
@@ -615,5 +653,49 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             height: 1,
             backgroundColor: colors.border,
             marginVertical: 5,
+        },
+        themeSelectorContainer: {
+            marginTop: 4,
+            marginBottom: 8,
+        },
+        themeSelectorHeader: {
+            marginBottom: 10,
+        },
+        themeSegmentRow: {
+            flexDirection: 'row',
+            backgroundColor: colors.surfaceAlt,
+            borderRadius: 14,
+            padding: 4,
+            gap: 6,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        themeSegmentButton: {
+            flex: 1,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            paddingVertical: 10,
+            borderRadius: 10,
+            gap: 8,
+        },
+        themeSegmentButtonActive: {
+            backgroundColor: colors.surface,
+            borderWidth: 1,
+            borderColor: colors.champagne,
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 1 },
+            shadowOpacity: 0.15,
+            shadowRadius: 2,
+            elevation: 2,
+        },
+        themeSegmentText: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.textSecondary,
+        },
+        themeSegmentTextActive: {
+            color: colors.textPrimary,
+            fontWeight: '700',
         },
     });
