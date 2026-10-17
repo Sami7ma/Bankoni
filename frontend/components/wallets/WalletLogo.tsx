@@ -26,15 +26,16 @@ export default function WalletLogo({ providerId, size = 42, style }: WalletLogoP
                         width: size,
                         height: size,
                         borderRadius,
-                        backgroundColor: '#FFFFFF',
+                        backgroundColor: 'transparent',
+                        borderColor: 'transparent',
                     },
                     style,
                 ]}
             >
                 <SvgXml
                     xml={provider.svgXml}
-                    width={size * 0.8}
-                    height={size * 0.8}
+                    width={size * 0.9}
+                    height={size * 0.9}
                 />
             </View>
         );

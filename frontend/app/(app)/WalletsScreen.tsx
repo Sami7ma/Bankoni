@@ -7,12 +7,8 @@ import React, { useState, useMemo } from 'react';
 import {
     Alert,
     FlatList,
-    Modal,
-    ScrollView,
     StyleSheet,
-    Switch,
     Text,
-    TextInput,
     TouchableOpacity,
     View,
 } from 'react-native';
@@ -23,7 +19,6 @@ import {
     ArchiveRestore,
     ArrowDownLeft,
     ArrowUpRight,
-    Check,
     ChevronRight,
     CreditCard,
     Plus,
@@ -31,16 +26,16 @@ import {
     Star,
     Trash2,
     WalletCards,
-    X,
 } from 'lucide-react-native';
 
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import { Wallet } from '../../types/Wallet';
-import { WALLET_PROVIDERS, getWalletProvider } from '../../constants/walletProviders';
+import { getWalletProvider } from '../../constants/walletProviders';
 import WalletLogo from '../../components/wallets/WalletLogo';
 import FloatingActionButton from '../../components/common/buttons/FloatingActionButton';
-import PrimaryButton from '../../components/common/buttons/PrimaryButton';
+import AddWalletModal from '../../components/modals/AddWalletModal';
+import EditWalletModal from '../../components/modals/EditWalletModal';
 
 export default function WalletsScreen() {
     const colors = useTheme();
@@ -49,7 +44,6 @@ export default function WalletsScreen() {
     const wallets = useBanKoniStore((state) => state.wallets);
     const transactions = useBanKoniStore((state) => state.transactions);
     const categories = useBanKoniStore((state) => state.categories);
-    const addWallet = useBanKoniStore((state) => state.addWallet);
     const updateWallet = useBanKoniStore((state) => state.updateWallet);
     const setDefaultWallet = useBanKoniStore((state) => state.setDefaultWallet);
     const archiveWallet = useBanKoniStore((state) => state.archiveWallet);
@@ -59,14 +53,6 @@ export default function WalletsScreen() {
     const [isAddModalVisible, setIsAddModalVisible] = useState(false);
     const [editingWallet, setEditingWallet] = useState<Wallet | null>(null);
     const [showArchived, setShowArchived] = useState(false);
-
-    // Form state for creating a wallet
-    const [providerId, setProviderId] = useState('cbe');
-    const [name, setName] = useState('');
-    const [openingBalance, setOpeningBalance] = useState('');
-    const [accountNumberLast4, setAccountNumberLast4] = useState('');
-    const [isDefault, setIsDefault] = useState(false);
-    const [saving, setSaving] = useState(false);
 
     // Active vs archived wallets
     const activeWallets = useMemo(
@@ -96,62 +82,6 @@ export default function WalletsScreen() {
         if (!selectedWalletId) return [];
         return transactions.filter((t) => t.walletId === selectedWalletId);
     }, [transactions, selectedWalletId]);
-
-    const openAddModal = () => {
-        setProviderId('cash');
-        setName('Physical Cash');
-        setOpeningBalance('0');
-        setAccountNumberLast4('');
-        setIsDefault(activeWallets.length === 0);
-        setIsAddModalVisible(true);
-    };
-
-    const handleSelectProvider = (pid: string) => {
-        setProviderId(pid);
-        const prov = getWalletProvider(pid);
-        if (prov.id === 'cash') {
-            setName('Physical Cash');
-        } else if (prov.type === 'mobile_money') {
-            setName(`${prov.shortName} Account`);
-        } else if (prov.type === 'bank') {
-            setName(`${prov.shortName} Account`);
-        } else {
-            setName('Custom Wallet');
-        }
-    };
-
-    const handleSaveNewWallet = async () => {
-        const cleanName = name.trim();
-        if (!cleanName) {
-            Alert.alert('Name Required', 'Please enter a name for this wallet.');
-            return;
-        }
-
-        const parsedOpening = parseFloat(openingBalance.trim() || '0');
-        if (isNaN(parsedOpening)) {
-            Alert.alert('Invalid Balance', 'Please enter a valid numeric opening balance.');
-            return;
-        }
-
-        setSaving(true);
-        try {
-            await addWallet({
-                name: cleanName,
-                icon: 'wallet',
-                providerId,
-                openingBalance: parsedOpening,
-                currency: 'ETB',
-                accountNumberLast4: accountNumberLast4.trim() ? accountNumberLast4.trim().slice(-4) : undefined,
-                isDefault,
-                isArchived: false,
-            });
-            setIsAddModalVisible(false);
-        } catch (error) {
-            Alert.alert('Error', error instanceof Error ? error.message : 'Could not add wallet.');
-        } finally {
-            setSaving(false);
-        }
-    };
 
     const openEditModal = (wallet: Wallet) => {
         setEditingWallet(wallet);
@@ -350,7 +280,7 @@ export default function WalletsScreen() {
                                 <View style={styles.walletCardInfo}>
                                     <View style={styles.walletNameRow}>
                                         <Text style={styles.walletName}>{item.name}</Text>
-                                        {item.isDefault && (
+                                        {item.isDefault && item.providerId !== 'cash' && (
                                             <View style={styles.defaultBadge}>
                                                 <Star size={11} color={colors.champagne} fill={colors.champagne} />
                                                 <Text style={styles.defaultBadgeText}>Default</Text>
@@ -471,202 +401,25 @@ export default function WalletsScreen() {
             />
 
             {/* Add Wallet FAB */}
-            <FloatingActionButton icon={<Plus size={24} color="#000000" />} onPress={openAddModal} />
+            <FloatingActionButton
+                icon={<Plus size={24} color="#000000" />}
+                onPress={() => setIsAddModalVisible(true)}
+            />
 
             {/* Modal: Add New Wallet */}
-            <Modal visible={isAddModalVisible} animationType="slide" transparent>
-                <View style={styles.modalOverlay}>
-                    <View style={styles.modalContent}>
-                        <View style={styles.modalHeader}>
-                            <Text style={styles.modalTitle}>Add New Wallet</Text>
-                            <TouchableOpacity onPress={() => setIsAddModalVisible(false)}>
-                                <X size={22} color={colors.textSecondary} />
-                            </TouchableOpacity>
-                        </View>
-
-                        <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                            {/* Provider Picker */}
-                            <Text style={styles.inputLabel}>Select Financial Provider</Text>
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.providerPickerContainer}
-                            >
-                                {WALLET_PROVIDERS.map((prov) => {
-                                    const isChosen = providerId === prov.id;
-                                    return (
-                                        <TouchableOpacity
-                                            key={prov.id}
-                                            style={[styles.providerOption, isChosen && styles.providerOptionSelected]}
-                                            onPress={() => handleSelectProvider(prov.id)}
-                                        >
-                                            <WalletLogo providerId={prov.id} size={36} />
-                                            <Text
-                                                style={[styles.providerOptionText, isChosen && styles.providerOptionTextSelected]}
-                                                numberOfLines={1}
-                                            >
-                                                {prov.shortName}
-                                            </Text>
-                                            {isChosen && (
-                                                <View style={styles.checkBadge}>
-                                                    <Check size={10} color="#000000" />
-                                                </View>
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
-
-                            {/* Wallet Name */}
-                            <Text style={styles.inputLabel}>Wallet Name / Label</Text>
-                            <TextInput
-                                style={styles.textInput}
-                                value={name}
-                                onChangeText={setName}
-                                placeholder="e.g. CBE Savings, Telebirr Personal"
-                                placeholderTextColor={colors.textMuted}
-                            />
-
-                            {/* Legitimate Opening Balance */}
-                            <Text style={styles.inputLabel}>Opening Balance (ETB)</Text>
-                            <TextInput
-                                style={styles.textInput}
-                                value={openingBalance}
-                                onChangeText={setOpeningBalance}
-                                placeholder="0.00"
-                                keyboardType="numeric"
-                                placeholderTextColor={colors.textMuted}
-                            />
-                            <Text style={styles.helperText}>
-                                Enter the true starting balance of this account. This value will be tracked distinctly from transactions.
-                            </Text>
-
-                            {/* Masked identifier / last 4 digits */}
-                            <Text style={styles.inputLabel}>Last 4 Digits / Masked Identifier (Optional)</Text>
-                            <TextInput
-                                style={styles.textInput}
-                                value={accountNumberLast4}
-                                onChangeText={setAccountNumberLast4}
-                                placeholder="e.g. 4821"
-                                keyboardType="number-pad"
-                                maxLength={4}
-                                placeholderTextColor={colors.textMuted}
-                            />
-
-                            {/* Default Toggle */}
-                            <View style={styles.switchRow}>
-                                <Text style={styles.switchLabel}>Set as Default Wallet</Text>
-                                <Switch
-                                    value={isDefault}
-                                    onValueChange={setIsDefault}
-                                    thumbColor={isDefault ? colors.champagne : colors.surfaceAlt}
-                                    trackColor={{ false: colors.border, true: colors.subtleGold }}
-                                />
-                            </View>
-
-                            <PrimaryButton
-                                label={saving ? 'Creating...' : 'Create Wallet'}
-                                onPress={handleSaveNewWallet}
-                                style={styles.submitButton}
-                            />
-                        </ScrollView>
-                    </View>
-                </View>
-            </Modal>
+            <AddWalletModal
+                visible={isAddModalVisible}
+                onClose={() => setIsAddModalVisible(false)}
+            />
 
             {/* Modal: Edit Wallet */}
-            {editingWallet && (
-                <EditWalletModalComponent
-                    wallet={editingWallet}
-                    onClose={() => setEditingWallet(null)}
-                    onSave={handleSaveEditedWallet}
-                    colors={colors}
-                    styles={styles}
-                />
-            )}
+            <EditWalletModal
+                visible={!!editingWallet}
+                wallet={editingWallet}
+                onClose={() => setEditingWallet(null)}
+                onSave={handleSaveEditedWallet}
+            />
         </SafeAreaView>
-    );
-}
-
-function EditWalletModalComponent({
-    wallet,
-    onClose,
-    onSave,
-    colors,
-    styles,
-}: {
-    wallet: Wallet;
-    onClose: () => void;
-    onSave: (id: string, name: string, opening: string, last4: string, isDef: boolean) => void;
-    colors: ReturnType<typeof useTheme>;
-    styles: ReturnType<typeof createStyles>;
-}) {
-    const [editName, setEditName] = useState(wallet.name);
-    const [editOpening, setEditOpening] = useState(wallet.openingBalance.toString());
-    const [editLast4, setEditLast4] = useState(wallet.accountNumberLast4 ?? '');
-    const [editIsDefault, setEditIsDefault] = useState(wallet.isDefault);
-
-    return (
-        <Modal visible animationType="slide" transparent>
-            <View style={styles.modalOverlay}>
-                <View style={styles.modalContent}>
-                    <View style={styles.modalHeader}>
-                        <Text style={styles.modalTitle}>Edit Wallet</Text>
-                        <TouchableOpacity onPress={onClose}>
-                            <X size={22} color={colors.textSecondary} />
-                        </TouchableOpacity>
-                    </View>
-
-                    <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-                        <Text style={styles.inputLabel}>Wallet Name</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            value={editName}
-                            onChangeText={setEditName}
-                            placeholderTextColor={colors.textMuted}
-                        />
-
-                        <Text style={styles.inputLabel}>Opening Balance ({wallet.currency})</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            value={editOpening}
-                            onChangeText={setEditOpening}
-                            keyboardType="numeric"
-                            placeholderTextColor={colors.textMuted}
-                        />
-                        <Text style={styles.helperText}>
-                            Modifying the opening balance automatically recalculates the current balance while preserving all recorded transactions.
-                        </Text>
-
-                        <Text style={styles.inputLabel}>Last 4 Digits</Text>
-                        <TextInput
-                            style={styles.textInput}
-                            value={editLast4}
-                            onChangeText={setEditLast4}
-                            keyboardType="number-pad"
-                            maxLength={4}
-                            placeholderTextColor={colors.textMuted}
-                        />
-
-                        <View style={styles.switchRow}>
-                            <Text style={styles.switchLabel}>Default Wallet</Text>
-                            <Switch
-                                value={editIsDefault}
-                                onValueChange={setEditIsDefault}
-                                thumbColor={editIsDefault ? colors.champagne : colors.surfaceAlt}
-                                trackColor={{ false: colors.border, true: colors.subtleGold }}
-                            />
-                        </View>
-
-                        <PrimaryButton
-                            label="Save Changes"
-                            onPress={() => onSave(wallet.id, editName, editOpening, editLast4, editIsDefault)}
-                            style={styles.submitButton}
-                        />
-                    </ScrollView>
-                </View>
-            </View>
-        </Modal>
     );
 }
 
@@ -937,107 +690,5 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             color: colors.textSecondary,
             textAlign: 'center',
             lineHeight: 18,
-        },
-        modalOverlay: {
-            flex: 1,
-            backgroundColor: 'rgba(0, 0, 0, 0.65)',
-            justifyContent: 'flex-end',
-        },
-        modalContent: {
-            backgroundColor: colors.surface,
-            borderTopLeftRadius: 24,
-            borderTopRightRadius: 24,
-            padding: 20,
-            maxHeight: '90%',
-            gap: 12,
-        },
-        modalHeader: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 8,
-        },
-        modalTitle: {
-            fontSize: 18,
-            fontWeight: '700',
-            color: colors.textPrimary,
-        },
-        inputLabel: {
-            fontSize: 13,
-            fontWeight: '600',
-            color: colors.textPrimary,
-            marginTop: 10,
-            marginBottom: 6,
-        },
-        textInput: {
-            backgroundColor: colors.surfaceAlt,
-            borderWidth: 1,
-            borderColor: colors.border,
-            borderRadius: 10,
-            paddingHorizontal: 14,
-            paddingVertical: 10,
-            color: colors.textPrimary,
-            fontSize: 14,
-        },
-        helperText: {
-            fontSize: 11,
-            color: colors.textMuted,
-            marginTop: 4,
-            lineHeight: 16,
-        },
-        providerPickerContainer: {
-            gap: 10,
-            paddingVertical: 4,
-        },
-        providerOption: {
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 8,
-            borderRadius: 12,
-            backgroundColor: colors.surfaceAlt,
-            borderWidth: 1,
-            borderColor: colors.border,
-            width: 82,
-            gap: 5,
-        },
-        providerOptionSelected: {
-            borderColor: colors.champagne,
-            backgroundColor: `${colors.champagne}15`,
-        },
-        providerOptionText: {
-            fontSize: 10,
-            color: colors.textSecondary,
-            fontWeight: '500',
-        },
-        providerOptionTextSelected: {
-            color: colors.champagne,
-            fontWeight: '700',
-        },
-        checkBadge: {
-            position: 'absolute',
-            top: 4,
-            right: 4,
-            backgroundColor: colors.champagne,
-            borderRadius: 8,
-            width: 14,
-            height: 14,
-            alignItems: 'center',
-            justifyContent: 'center',
-        },
-        switchRow: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginTop: 14,
-            marginBottom: 10,
-        },
-        switchLabel: {
-            fontSize: 14,
-            fontWeight: '600',
-            color: colors.textPrimary,
-        },
-        submitButton: {
-            marginTop: 14,
-            marginBottom: 16,
         },
     });

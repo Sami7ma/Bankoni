@@ -30,6 +30,7 @@ interface AmountInputProps {
     onChangeText: (text: string) => void;
     variant?: 'large' | 'compact';   // defaults to 'large'
     autoFocus?: boolean;              // should it auto-open keyboard?
+    currency?: string;                // defaults to 'ETB'
 }
 
 export default function AmountInput({
@@ -37,6 +38,7 @@ export default function AmountInput({
     onChangeText,
     variant = 'large',     // default to large if not specified
     autoFocus = false,
+    currency = 'ETB',
 }: AmountInputProps) {
 
     const colors = useTheme();
@@ -46,7 +48,7 @@ export default function AmountInput({
     if (variant === 'compact') {
         return (
             <View style={styles.compactRow}>
-                <Text style={styles.compactCurrency}>ETB</Text>
+                <Text style={styles.compactCurrency}>{currency}</Text>
                 <TextInput
                     style={styles.compactInput}
                     value={value}
@@ -63,7 +65,7 @@ export default function AmountInput({
     // LARGE VARIANT — centered big display (used in Transaction modal)
     return (
         <View style={styles.largeContainer}>
-            <Text style={styles.largeCurrency}>ETB</Text>
+            <Text style={styles.largeCurrency}>{currency}</Text>
             <TextInput
                 style={styles.largeInput}
                 value={value}
