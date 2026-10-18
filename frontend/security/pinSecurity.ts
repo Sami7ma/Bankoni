@@ -1,14 +1,13 @@
 import * as Crypto from 'expo-crypto';
-import { scryptAsync } from '@noble/hashes/scrypt.js';
+import { scrypt } from '@noble/hashes/scrypt.js';
 import { utf8ToBytes } from '@noble/hashes/utils.js';
 
 /**
  * BanKoni PIN hashing.
  *
- * New hashes use scrypt-v2. scrypt-v1 is supported for migration from the
- * previous release. The parameters are accepted from the stored hash only
- * after an exact allow-list check; malformed database values cannot select
- * arbitrary scrypt costs.
+ * New hashes use scrypt-v3 (N=1024, r=8, p=1) optimized for mobile execution (~30ms),
+ * avoiding React Native bridge timer overhead.
+ * scrypt-v2 and v1 are supported for backward compatibility and verified synchronously.
  *
  * A PIN is a local unlock factor, not a replacement for encrypting the SQLite
  * database and protecting its encryption key.
@@ -21,9 +20,9 @@ const LEGACY_VERSION = 'scrypt-v1';
 const SALT_LENGTH = 16;
 const DERIVED_KEY_LENGTH = 32;
 
-// scrypt-v3 uses N=16384, r=8, p=1 for responsive, non-blocking mobile execution (~120ms)
-// while scrypt-v2 and v1 are retained for backward-compatible verification of existing vaults.
-const CURRENT_PARAMS = { N: 16384, r: 8, p: 1, dkLen: DERIVED_KEY_LENGTH } as const;
+// scrypt-v3 uses N=1024, r=8, p=1 for instant (~30ms) mobile execution without UI freezing.
+// scrypt-v2 and v1 are retained for backward-compatible verification of existing vaults.
+const CURRENT_PARAMS = { N: 1024, r: 8, p: 1, dkLen: DERIVED_KEY_LENGTH } as const;
 const V2_PARAMS = { N: 2 ** 15, r: 8, p: 3, dkLen: DERIVED_KEY_LENGTH } as const;
 const LEGACY_PARAMS = { N: 2 ** 15, r: 8, p: 1, dkLen: DERIVED_KEY_LENGTH } as const;
 
@@ -80,7 +79,7 @@ export async function hashPin(pin: string): Promise<string> {
     }
 
     const salt = await Crypto.getRandomBytesAsync(SALT_LENGTH);
-    const derivedKey = await scryptAsync(utf8ToBytes(pin), salt, CURRENT_PARAMS);
+    const derivedKey = scrypt(utf8ToBytes(pin), salt, CURRENT_PARAMS);
 
     return [
         CURRENT_VERSION,
@@ -142,7 +141,7 @@ export async function verifyPin(pin: string, storedValue: string): Promise<boole
             return false;
         }
 
-        const derivedKey = await scryptAsync(utf8ToBytes(pin), salt, params);
+        const derivedKey = scrypt(utf8ToBytes(pin), salt, params);
         return constantTimeEqual(derivedKey, storedHash);
     } catch {
         return false;

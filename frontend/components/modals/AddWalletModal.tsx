@@ -154,7 +154,7 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
                                             onPress={() => handleSelectProvider(prov.id)}
                                             activeOpacity={0.7}
                                         >
-                                            <WalletLogo providerId={prov.id} size={36} />
+                                            <WalletLogo providerId={prov.id} size={40} />
                                             <Text
                                                 style={[styles.providerOptionText, isChosen && styles.providerOptionTextSelected]}
                                                 numberOfLines={1}
@@ -178,7 +178,7 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
                                 value={name}
                                 onChangeText={setName}
                                 placeholder="e.g. CBE Savings, Telebirr Personal"
-                                placeholderTextColor={colors.textMuted}
+                                placeholderTextColor={colors.textSecondary}
                             />
 
                             {/* Legitimate Opening Balance */}
@@ -201,7 +201,7 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
                                 placeholder="e.g. 4821"
                                 keyboardType="number-pad"
                                 maxLength={4}
-                                placeholderTextColor={colors.textMuted}
+                                placeholderTextColor={colors.textSecondary}
                             />
 
                             {/* Default Toggle */}
@@ -307,11 +307,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         },
         inputLabel: {
             fontSize: 12,
-            fontWeight: '600',
-            color: colors.textSecondary,
-            letterSpacing: 0.4,
+            fontWeight: '700',
+            color: colors.textPrimary,
+            letterSpacing: 0.5,
             textTransform: 'uppercase',
             marginTop: 4,
+            marginBottom: 2,
         },
         textInput: {
             backgroundColor: colors.surfaceAlt,
@@ -325,9 +326,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         },
         helperText: {
             fontSize: 12,
-            color: colors.textMuted,
-            marginTop: -6,
-            lineHeight: 17,
+            color: colors.textSecondary,
+            marginTop: 4,
+            lineHeight: 18,
         },
         providerPickerContainer: {
             gap: 10,

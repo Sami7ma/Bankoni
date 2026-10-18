@@ -129,10 +129,8 @@ export default function LoginScreen({ navigation }: Props) {
             style={styles.drawerLogo}
             resizeMode="contain"
           />
-          <Text style={styles.logo}>BanKoni</Text>
           <Text style={styles.tagline}>Welcome Back</Text>
           <Text style={styles.userBadge}>{displayName}</Text>
-          <Text style={styles.subtitle}>Enter your PIN to access your vault.</Text>
         </View>
 
         <View style={styles.inputGroup}>
@@ -217,15 +215,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
   container: { flex: 1, backgroundColor: colors.background },
   scrollContent: {
     flexGrow: 1,
-    justifyContent: 'center',
     paddingHorizontal: 22,
-    paddingVertical: 40,
+    paddingTop: Platform.OS === 'ios' ? 36 : 20,
+    paddingBottom: 24,
   },
-  header: { marginBottom: 32, alignItems: 'center' },
+  header: { marginBottom: 22, alignItems: 'center', marginTop: 4 },
   drawerLogo: {
-    width: 130,
-    height: 100,
-    marginBottom: 10,
+    width: 210,
+    height: 171,
+    marginBottom: 6,
   },
   logo: {
     fontSize: 40,
@@ -233,8 +231,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
     color: colors.champagne,
     letterSpacing: 1.5,
   },
-  tagline: { fontSize: 22, fontWeight: '700', color: colors.textPrimary, marginTop: 8 },
-  userBadge: { fontSize: 16, fontWeight: '600', color: colors.champagne, marginTop: 5 },
+  tagline: { fontSize: 24, fontWeight: '700', color: colors.textPrimary, marginTop: 4 },
+  userBadge: { fontSize: 16, fontWeight: '600', color: colors.champagne, marginTop: 4 },
   subtitle: { fontSize: 13, color: colors.textSecondary, marginTop: 7, textAlign: 'center' },
   inputGroup: { marginBottom: 12 },
   label: {
@@ -270,8 +268,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
     gap: 10,
   },
   biometricButtonText: { fontSize: 14, fontWeight: '600', color: colors.textPrimary },
-  registerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 28 },
+  registerRow: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   registerText: { color: colors.textSecondary, fontSize: 14 },
   registerLink: { color: colors.champagne, fontSize: 14, fontWeight: '700' },
-  vaultNotice: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: 28, lineHeight: 18 },
+  vaultNotice: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginTop: 20, lineHeight: 18 },
 });

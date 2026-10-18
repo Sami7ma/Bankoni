@@ -6,7 +6,7 @@ import React, { useState, useMemo, act } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { CalendarDays, Filter, Search, X, Plus } from 'lucide-react-native';
+import { CalendarDays, CreditCard, Filter, Plus, Search, X } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
@@ -198,6 +198,7 @@ export default function TransactionScreen() {
                                     styles.filterPill,
                                     active && {
                                         backgroundColor: colors.champagne + '20',
+                                        borderWidth: 1,
                                         borderColor: colors.champagne,
                                     },
                                 ]}
@@ -234,14 +235,12 @@ export default function TransactionScreen() {
             {/* transacion list */}
             {filteredTransactions.length == 0 ? (
                 <View style={styles.emptyState}>
-                    <Text style={styles.emptyIcon}>
-                        💳
-                    </Text>
+                    <CreditCard size={52} color={colors.champagne} style={{ marginBottom: 12 }} />
                     <Text style={styles.emptyTitle}>
                         No transactions found
                     </Text>
                     <Text style={styles.emptySubtitle}>
-                        Try changin your serach, filter, or date.
+                        Try changing your search, filter, or date.
                     </Text>
                 </View>
             ) : (
@@ -396,8 +395,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         marginHorizontal: 15,
         marginVertical: 10,
         borderRadius: 14,
-        borderWidth: 1,
-        borderColor: colors.border,
+        borderWidth: 0,
         paddingHorizontal: 12,
         paddingVertical: 8,
         gap: 8,
@@ -422,9 +420,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         paddingHorizontal: 14,
         paddingVertical: 10,
         borderRadius: 13,
-        borderWidth: 1,
-        borderColor: colors.border,
         backgroundColor: colors.surface,
+        borderWidth: 0,
     },
     dateButtonText: {
         color: colors.textPrimary,
@@ -453,8 +450,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         paddingHorizontal: 16,
         paddingVertical: 10,
         borderRadius: 15,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: colors.surface,
+        borderWidth: 0,
+        borderColor: 'transparent',
         alignItems: 'center',
         justifyContent: 'center',
     },
@@ -492,10 +490,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         justifyContent: 'center',
         paddingHorizontal: 30,
         gap: 8,
-    },
-    emptyIcon: {
-        fontSize: 48,
-        marginBottom: 8,
     },
     emptyTitle: {
         fontSize: 16,

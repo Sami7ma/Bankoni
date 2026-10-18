@@ -240,6 +240,11 @@ async function initializeDatabase(): Promise<void> {
             throw new Error(`This BanKoni database schema (version ${previousVersion}) is newer than this app supports.`);
         }
 
+        // Fast path: if schema is already up-to-date, avoid re-running DDL and category seed queries on every boot
+        if (previousVersion === DATABASE_VERSION) {
+            return;
+        }
+
         await tx.execAsync(SCHEMA_SQL);
 
         // The original app's schema did not scope records to a user. Fail closed if

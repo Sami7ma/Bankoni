@@ -27,6 +27,7 @@ export const WALLET_PROVIDERS: WalletProviderInfo[] = [
         defaultCurrency: 'ETB',
         brandColor: '#10B981',
         monogram: 'CASH',
+        svgXml: BANK_SVG_LOGOS.cash,
         description: 'Physical cash in hand or wallet',
     },
     {

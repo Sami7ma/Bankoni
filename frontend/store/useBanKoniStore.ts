@@ -185,23 +185,21 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         });
         try {
             await initDatabase();
-            const [hasHardware, enrolled] = await Promise.all([
-                LocalAuthentication.hasHardwareAsync(),
-                LocalAuthentication.isEnrolledAsync(),
+            const [hardwareResult, active, savedTheme] = await Promise.all([
+                Promise.all([
+                    LocalAuthentication.hasHardwareAsync(),
+                    LocalAuthentication.isEnrolledAsync(),
+                ]),
+                getActiveUserDB(),
+                SecureStore.getItemAsync('bankoni_theme').catch(() => null),
             ]);
-            const active = await getActiveUserDB();
+            const [hasHardware, enrolled] = hardwareResult;
 
-            // Restore user's saved theme preference if present, otherwise default to device theme
-            try {
-                const savedTheme = await SecureStore.getItemAsync('bankoni_theme');
-                if (savedTheme === 'light' || savedTheme === 'dark') {
-                    set({ theme: savedTheme });
-                } else {
-                    const sysTheme = Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
-                    set({ theme: sysTheme });
-                }
-            } catch {
-                // Ignore storage failure on theme
+            if (savedTheme === 'light' || savedTheme === 'dark') {
+                set({ theme: savedTheme });
+            } else {
+                const sysTheme = Appearance.getColorScheme() === 'dark' ? 'dark' : 'light';
+                set({ theme: sysTheme });
             }
 
             set({

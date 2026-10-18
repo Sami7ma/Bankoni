@@ -1,11 +1,10 @@
-// frontend/components/wallets/WalletLogo.tsx
-// Renders vector SVG bank/mobile money logos or brand-colored fallback monograms.
-
 import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { Banknote, Building2, Smartphone, WalletCards } from 'lucide-react-native';
 import { getWalletProvider } from '../../constants/walletProviders';
+import { BANK_SVG_LOGOS_DARK } from '../../constants/bankLogosSvg';
+import useBanKoniStore from '../../store/useBanKoniStore';
 
 interface WalletLogoProps {
     providerId?: string | null;
@@ -15,9 +14,15 @@ interface WalletLogoProps {
 
 export default function WalletLogo({ providerId, size = 42, style }: WalletLogoProps) {
     const provider = getWalletProvider(providerId);
+    const theme = useBanKoniStore((state) => state.theme);
+    const isDark = theme === 'dark';
     const borderRadius = Math.round(size * 0.28);
 
-    if (provider.svgXml) {
+    const svgXml = (isDark && provider.id && BANK_SVG_LOGOS_DARK[provider.id])
+        ? BANK_SVG_LOGOS_DARK[provider.id]
+        : provider.svgXml;
+
+    if (svgXml) {
         return (
             <View
                 style={[
@@ -33,9 +38,9 @@ export default function WalletLogo({ providerId, size = 42, style }: WalletLogoP
                 ]}
             >
                 <SvgXml
-                    xml={provider.svgXml}
-                    width={size * 0.9}
-                    height={size * 0.9}
+                    xml={svgXml}
+                    width={size}
+                    height={size}
                 />
             </View>
         );

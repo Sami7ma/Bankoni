@@ -199,12 +199,15 @@ export default function WalletsScreen() {
 
             {/* Header */}
             <View style={styles.header}>
-                <View>
+                <View style={styles.headerText}>
                     <Text style={styles.headerTitle}>Wallets</Text>
                     <Text style={styles.headerSubtitle}>
                         Your cash, Ethiopian bank accounts, and mobile wallets.
                     </Text>
                 </View>
+                <FloatingActionButton
+                    onPress={() => setIsAddModalVisible(true)}
+                />
             </View>
 
             {/* Total Balance Summary Card */}
@@ -400,12 +403,6 @@ export default function WalletsScreen() {
                 }}
             />
 
-            {/* Add Wallet FAB */}
-            <FloatingActionButton
-                icon={<Plus size={24} color="#000000" />}
-                onPress={() => setIsAddModalVisible(true)}
-            />
-
             {/* Modal: Add New Wallet */}
             <AddWalletModal
                 visible={isAddModalVisible}
@@ -430,19 +427,26 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             backgroundColor: colors.background,
         },
         header: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
             paddingHorizontal: 18,
-            paddingTop: 12,
-            paddingBottom: 10,
+            paddingTop: 2,
+            paddingBottom: 12,
+        },
+        headerText: {
+            flex: 1,
+            paddingRight: 12,
         },
         headerTitle: {
-            fontSize: 26,
-            fontWeight: '700',
+            fontSize: 28,
+            fontWeight: 'bold',
             color: colors.textPrimary,
         },
         headerSubtitle: {
-            fontSize: 13,
+            fontSize: 14,
             color: colors.textSecondary,
-            marginTop: 3,
+            marginTop: 4,
         },
         summaryCard: {
             marginHorizontal: 16,

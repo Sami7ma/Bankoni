@@ -44,7 +44,7 @@ export default function AmountInput({
     const colors = useTheme();
     const styles = createStyles(colors);
 
-    // COMPACT VARIANT — row with border (used in Budget modal)
+    // COMPACT VARIANT — row with border (used in Budget and Add Wallet modals)
     if (variant === 'compact') {
         return (
             <View style={styles.compactRow}>
@@ -54,7 +54,7 @@ export default function AmountInput({
                     value={value}
                     onChangeText={onChangeText}
                     placeholder="0.00"
-                    placeholderTextColor={colors.textMuted}
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="decimal-pad"    // only show number keys + decimal
                     autoFocus={autoFocus}
                 />
@@ -71,7 +71,7 @@ export default function AmountInput({
                 value={value}
                 onChangeText={onChangeText}
                 placeholder="0.00"
-                placeholderTextColor={colors.textMuted + '70'}
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="decimal-pad"
                 autoFocus={autoFocus}
             />
@@ -90,9 +90,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             gap: 8,
         },
         largeCurrency: {
-            fontSize: 17,
-            fontWeight: '500',
-            color: colors.textSecondary,
+            fontSize: 18,
+            fontWeight: '600',
+            color: colors.champagne,
             marginTop: 8,
         },
         largeInput: {
@@ -114,16 +114,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             paddingHorizontal: 16,
             borderWidth: 1,
             borderColor: colors.border,
-            gap: 8,
+            gap: 10,
         },
         compactCurrency: {
-            fontSize: 16,
-            fontWeight: '600',
-            color: colors.textSecondary,
+            fontSize: 17,
+            fontWeight: '700',
+            color: colors.champagne,
         },
         compactInput: {
             flex: 1,
-            fontSize: 28,
+            fontSize: 26,
             fontWeight: '700',
             color: colors.champagne,
             paddingVertical: 14,

@@ -19,6 +19,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import {
+    Bell,
+    BellRing,
     ChevronDown,
     ChevronUp,
     Database,
@@ -30,6 +32,7 @@ import {
     Sun,
     UserRound,
 } from 'lucide-react-native';
+import * as SecureStore from 'expo-secure-store';
 
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
@@ -78,11 +81,53 @@ export default function SettingsScreen() {
     const [changingBiometrics, setChangingBiometrics] = useState(false);
     const [exporting, setExporting] = useState(false);
 
+    // Budget alerts configuration state
+    const [budgetAlertsEnabled, setBudgetAlertsEnabled] = useState(true);
+    const [popupAlertsEnabled, setPopupAlertsEnabled] = useState(true);
+    const [alertThreshold, setAlertThreshold] = useState<number>(0.8);
+
     // Refresh the editor if the authenticated profile changes.
     useEffect(() => {
         setName(user?.name ?? '');
         setEmail(user?.email ?? '');
     }, [user?.name, user?.email]);
+
+    // Load budget alert preferences on mount
+    useEffect(() => {
+        (async () => {
+            try {
+                const alertsPref = await SecureStore.getItemAsync('bankoni_budget_alerts_enabled');
+                if (alertsPref !== null) setBudgetAlertsEnabled(alertsPref === 'true');
+                const popupPref = await SecureStore.getItemAsync('bankoni_popup_alerts_enabled');
+                if (popupPref !== null) setPopupAlertsEnabled(popupPref === 'true');
+                const thresholdPref = await SecureStore.getItemAsync('bankoni_alert_threshold');
+                if (thresholdPref !== null) setAlertThreshold(parseFloat(thresholdPref) || 0.8);
+            } catch {
+                // Ignore storage error
+            }
+        })();
+    }, []);
+
+    const handleToggleBudgetAlerts = async (val: boolean) => {
+        setBudgetAlertsEnabled(val);
+        try {
+            await SecureStore.setItemAsync('bankoni_budget_alerts_enabled', val ? 'true' : 'false');
+        } catch {}
+    };
+
+    const handleTogglePopupAlerts = async (val: boolean) => {
+        setPopupAlertsEnabled(val);
+        try {
+            await SecureStore.setItemAsync('bankoni_popup_alerts_enabled', val ? 'true' : 'false');
+        } catch {}
+    };
+
+    const handleSelectThreshold = async (val: number) => {
+        setAlertThreshold(val);
+        try {
+            await SecureStore.setItemAsync('bankoni_alert_threshold', val.toString());
+        } catch {}
+    };
 
     const toggleSection = (section: SectionKey) => {
         LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
@@ -408,78 +453,115 @@ export default function SettingsScreen() {
                     'Appearance and financial defaults',
                     <SlidersHorizontal size={22} color={colors.champagne} />,
                     <>
-                        <View style={styles.themeSelectorContainer}>
-                            <View style={styles.themeSelectorHeader}>
-                                <Text style={styles.rowTitle}>Theme</Text>
+                        {/* Theme Toggle */}
+                        <View style={styles.preferenceRow}>
+                            {theme === 'dark' ? (
+                                <Moon size={21} color={colors.champagne} />
+                            ) : (
+                                <Sun size={21} color={colors.champagne} />
+                            )}
+                            <View style={styles.preferenceText}>
+                                <Text style={styles.rowTitle}>Dark theme</Text>
                                 <Text style={styles.infoText}>
-                                    Select your preferred appearance mode.
+                                    {theme === 'dark' ? 'Dark mode active' : 'Light mode active'}
                                 </Text>
                             </View>
-
-                            <View style={styles.themeSegmentRow}>
-                                <TouchableOpacity
-                                    style={[
-                                        styles.themeSegmentButton,
-                                        theme === 'light' && styles.themeSegmentButtonActive,
-                                    ]}
-                                    onPress={() => setTheme('light')}
-                                    activeOpacity={0.75}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Light theme"
-                                    accessibilityState={{ selected: theme === 'light' }}
-                                >
-                                    <Sun
-                                        size={18}
-                                        color={theme === 'light' ? colors.champagne : colors.textSecondary}
-                                    />
-                                    <Text
-                                        style={[
-                                            styles.themeSegmentText,
-                                            theme === 'light' && styles.themeSegmentTextActive,
-                                        ]}
-                                    >
-                                        Light
-                                    </Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[
-                                        styles.themeSegmentButton,
-                                        theme === 'dark' && styles.themeSegmentButtonActive,
-                                    ]}
-                                    onPress={() => setTheme('dark')}
-                                    activeOpacity={0.75}
-                                    accessibilityRole="button"
-                                    accessibilityLabel="Dark theme"
-                                    accessibilityState={{ selected: theme === 'dark' }}
-                                >
-                                    <Moon
-                                        size={18}
-                                        color={theme === 'dark' ? colors.champagne : colors.textSecondary}
-                                    />
-                                    <Text
-                                        style={[
-                                            styles.themeSegmentText,
-                                            theme === 'dark' && styles.themeSegmentTextActive,
-                                        ]}
-                                    >
-                                        Dark
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                            <Switch
+                                value={theme === 'dark'}
+                                onValueChange={toggleTheme}
+                                trackColor={{
+                                    false: colors.border,
+                                    true: colors.champagne,
+                                }}
+                                thumbColor="#FFFFFF"
+                                accessibilityLabel="Enable dark theme"
+                            />
                         </View>
 
                         <View style={styles.separator} />
-                        <Text style={styles.rowTitle}>Currency</Text>
-                        <Text style={styles.infoText}>
-                            Currency is configured per wallet. Keeping each wallet's actual currency prevents incompatible balances from being added together.
-                        </Text>
 
-                        <View style={styles.separator} />
-                        <Text style={styles.rowTitle}>Budget alerts</Text>
-                        <Text style={styles.infoText}>
-                            Alert thresholds are configured on individual budgets. Notification scheduling is not available from this screen yet.
-                        </Text>
+                        {/* Budget Alerts Master Toggle */}
+                        <View style={styles.preferenceRow}>
+                            <Bell size={21} color={colors.champagne} />
+                            <View style={styles.preferenceText}>
+                                <Text style={styles.rowTitle}>Budget alerts</Text>
+                                <Text style={styles.infoText}>
+                                    Notify when category spending approaches budget limits.
+                                </Text>
+                            </View>
+                            <Switch
+                                value={budgetAlertsEnabled}
+                                onValueChange={handleToggleBudgetAlerts}
+                                trackColor={{
+                                    false: colors.border,
+                                    true: colors.champagne,
+                                }}
+                                thumbColor="#FFFFFF"
+                                accessibilityLabel="Enable budget alerts"
+                            />
+                        </View>
+
+                        {/* Popup Modal Alerts Toggle */}
+                        <View style={styles.preferenceRow}>
+                            <BellRing size={21} color={budgetAlertsEnabled ? colors.champagne : colors.textSecondary} />
+                            <View style={styles.preferenceText}>
+                                <Text style={[styles.rowTitle, !budgetAlertsEnabled && { color: colors.textSecondary }]}>
+                                    In-app popup warnings
+                                </Text>
+                                <Text style={styles.infoText}>
+                                    Show an instant popup modal when a transaction breaches a limit.
+                                </Text>
+                            </View>
+                            <Switch
+                                value={popupAlertsEnabled && budgetAlertsEnabled}
+                                onValueChange={handleTogglePopupAlerts}
+                                disabled={!budgetAlertsEnabled}
+                                trackColor={{
+                                    false: colors.border,
+                                    true: colors.champagne,
+                                }}
+                                thumbColor="#FFFFFF"
+                                accessibilityLabel="Enable in-app popup warnings"
+                            />
+                        </View>
+
+                        {/* Alert Threshold Pill Selection */}
+                        <View style={[styles.thresholdContainer, !budgetAlertsEnabled && { opacity: 0.5 }]}>
+                            <Text style={styles.thresholdTitle}>Warning threshold</Text>
+                            <Text style={styles.infoText}>
+                                Trigger warnings when category spending reaches:
+                            </Text>
+                            <View style={styles.thresholdPillRow}>
+                                {[
+                                    { label: '80% of limit', val: 0.8 },
+                                    { label: '90% of limit', val: 0.9 },
+                                    { label: '100% of limit', val: 1.0 },
+                                ].map((item) => {
+                                    const isSelected = alertThreshold === item.val;
+                                    return (
+                                        <TouchableOpacity
+                                            key={item.val}
+                                            style={[
+                                                styles.thresholdPill,
+                                                isSelected && styles.thresholdPillSelected,
+                                            ]}
+                                            onPress={() => budgetAlertsEnabled && handleSelectThreshold(item.val)}
+                                            disabled={!budgetAlertsEnabled}
+                                            activeOpacity={0.7}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.thresholdPillText,
+                                                    isSelected && styles.thresholdPillTextSelected,
+                                                ]}
+                                            >
+                                                {item.label}
+                                            </Text>
+                                        </TouchableOpacity>
+                                    );
+                                })}
+                            </View>
+                        </View>
                     </>,
                 )}
 
@@ -654,48 +736,45 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             backgroundColor: colors.border,
             marginVertical: 5,
         },
-        themeSelectorContainer: {
-            marginTop: 4,
-            marginBottom: 8,
-        },
-        themeSelectorHeader: {
-            marginBottom: 10,
-        },
-        themeSegmentRow: {
-            flexDirection: 'row',
-            backgroundColor: colors.surfaceAlt,
-            borderRadius: 14,
-            padding: 4,
+        thresholdContainer: {
             gap: 6,
-            borderWidth: 1,
-            borderColor: colors.border,
+            marginTop: 8,
+            paddingTop: 8,
+            borderTopWidth: 1,
+            borderTopColor: colors.border,
         },
-        themeSegmentButton: {
-            flex: 1,
+        thresholdTitle: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.textPrimary,
+        },
+        thresholdPillRow: {
             flexDirection: 'row',
+            gap: 8,
+            marginTop: 6,
+        },
+        thresholdPill: {
+            flex: 1,
+            paddingVertical: 10,
+            paddingHorizontal: 8,
+            borderRadius: 12,
+            backgroundColor: colors.surfaceAlt,
             alignItems: 'center',
             justifyContent: 'center',
-            paddingVertical: 10,
-            borderRadius: 10,
-            gap: 8,
+            borderWidth: 0,
         },
-        themeSegmentButtonActive: {
-            backgroundColor: colors.surface,
+        thresholdPillSelected: {
+            backgroundColor: `${colors.champagne}18`,
             borderWidth: 1,
             borderColor: colors.champagne,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 1 },
-            shadowOpacity: 0.15,
-            shadowRadius: 2,
-            elevation: 2,
         },
-        themeSegmentText: {
-            fontSize: 14,
+        thresholdPillText: {
+            fontSize: 12,
             fontWeight: '600',
             color: colors.textSecondary,
         },
-        themeSegmentTextActive: {
-            color: colors.textPrimary,
+        thresholdPillTextSelected: {
+            color: colors.champagne,
             fontWeight: '700',
         },
     });

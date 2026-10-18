@@ -19,9 +19,19 @@ interface SpendingLineChartProps {
     values: number[];    // data points like [500, 300, 800]
 }
 
+// Helper to format Y-axis currency numbers consistently without clutter
+const formatYValue = (val: string) => {
+    const num = Math.round(Number(val));
+    if (isNaN(num)) return val;
+    if (num >= 1000000) return `${(num / 1000000).toFixed(1)}M`;
+    if (num >= 10000) return `${Math.round(num / 1000)}k`;
+    return `${num}`;
+};
+
 export default function SpendingLineChart({ labels, values }: SpendingLineChartProps) {
     const colors = useTheme();
     const styles = createStyles(colors);
+
     // empty state
     if (values.length === 0 || values.every((v) => v === 0)) {
         return (
@@ -31,6 +41,18 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
             </View>
         );
     }
+
+    // Dynamic width calculation so the curve extends cleanly to the right side of the card,
+    // eliminating dead space, while paddingLeftOffset gives generous room on the left
+    // so "ETB" labels never touch or crowd the left card border.
+    const numPoints = Math.max(labels.length, 1);
+    const cardInnerWidth = SCREEN_WIDTH - 20; // 10px padding on screen edges
+    const paddingLeftOffset = 90; // Left margin for Y-axis labels (keeps ETB 30px away from border)
+    const targetRight = cardInnerWidth - 28; // Where the last point should land
+    const chartWidth = numPoints > 1
+        ? paddingLeftOffset + (targetRight - paddingLeftOffset) * (numPoints / (numPoints - 1))
+        : cardInnerWidth;
+
     return (
         <View style={styles.container}>
             <LineChart
@@ -38,22 +60,25 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
                     labels: labels,
                     datasets: [{ data: values }],
                 }}
-                width={SCREEN_WIDTH - 55}
+                width={chartWidth}
                 height={210}
-                yAxisLabel="ETB"
+                yAxisLabel="ETB "
                 yAxisSuffix=""
+                yLabelsOffset={8}
+                formatYLabel={formatYValue}
                 withDots={true}              // show dots on data points
                 withInnerLines={false}       // hide horizontal grid lines
                 withOuterLines={false}       // hide the outer border
                 withVerticalLines={false}    // hide vertical grid lines
                 withHorizontalLabels={true}  // show y-axis labels
                 fromZero={true}              // y-axis starts at 0
-                bezier                       // smooth curved line (not jagged
+                bezier                       // smooth curved line (not jagged)
                 chartConfig={{
                     // BACKGROUND
                     backgroundColor: colors.surface,
                     backgroundGradientFrom: colors.surface,
                     backgroundGradientTo: colors.surface,
+                    decimalPlaces: 0,
                     // LINE + DOTS
                     color: () => colors.champagne,           // line color (gold)
                     // FILL UNDER THE LINE
@@ -62,10 +87,10 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
                     fillShadowGradientTo: colors.champagne,
                     fillShadowGradientToOpacity: 0.0,        // fades to invisible
                     // LABELS (text on axes)
-                    labelColor: () => colors.textSecondary,                    // no decimals on y-axis
+                    labelColor: () => colors.textPrimary,
                     propsForLabels: {
-                        fontSize: 11,
-                        fontWeight: '500',
+                        fontSize: 12,
+                        fontWeight: '700',
                     },
                     // DECORATION
                     propsForDots: {
@@ -79,19 +104,22 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
         </View>
     );
 }
+
 // styles
 const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create({
     container: {
         backgroundColor: colors.surface,
         borderRadius: 16,
-        paddingVertical: 16,
-        paddingHorizontal: 8,
+        paddingTop: 16,
+        paddingBottom: 14,
         borderWidth: 1,
         borderColor: colors.border,
-        alignItems: 'center',
+        overflow: 'hidden',
+        alignItems: 'flex-start',
     },
     chart: {
         borderRadius: 12,
+        paddingRight: 90, // Sets react-native-chart-kit left plot offset
     },
     emptyContainer: {
         backgroundColor: colors.surface,

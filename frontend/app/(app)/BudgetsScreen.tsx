@@ -150,7 +150,8 @@ export default function BudgetsScreen() {
                 ListEmptyComponent={
                     <View style={styles.emptyState}>
                         <NotebookPen
-                            size={62}
+                            size={56}
+                            color={colors.champagne}
                             style={styles.emptyIcon}
                             strokeWidth={1.5}
                         />
