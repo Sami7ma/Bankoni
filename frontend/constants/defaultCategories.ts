@@ -25,11 +25,11 @@ export const defaultExpenseCategories: Category[] = [
 
 // Income categories — ways you earn money
 export const defaultIncomeCategories: Category[] = [
-    { id: 'cat-16', name: 'Salary', iconKey: 'payments', flow: 'INCOME', essential: true, recurring: true, isBuiltIn: true, isCustom: false },
-    { id: 'cat-17', name: 'Business', iconKey: 'payments', flow: 'INCOME', essential: true, recurring: false, isBuiltIn: true, isCustom: false },
-    { id: 'cat-18', name: 'Side Hustle', iconKey: 'payments', flow: 'INCOME', essential: false, recurring: false, isBuiltIn: true, isCustom: false },
-    { id: 'cat-19', name: 'Bonus', iconKey: 'payments', flow: 'INCOME', essential: false, recurring: false, isBuiltIn: true, isCustom: false },
-    { id: 'cat-20', name: 'Refund', iconKey: 'payments', flow: 'INCOME', essential: false, recurring: false, isBuiltIn: true, isCustom: false },
+    { id: 'cat-16', name: 'Salary', iconKey: 'banknote', flow: 'INCOME', essential: true, recurring: true, isBuiltIn: true, isCustom: false },
+    { id: 'cat-17', name: 'Business', iconKey: 'building_2', flow: 'INCOME', essential: true, recurring: false, isBuiltIn: true, isCustom: false },
+    { id: 'cat-18', name: 'Side Hustle', iconKey: 'laptop', flow: 'INCOME', essential: false, recurring: false, isBuiltIn: true, isCustom: false },
+    { id: 'cat-19', name: 'Bonus', iconKey: 'award', flow: 'INCOME', essential: false, recurring: false, isBuiltIn: true, isCustom: false },
+    { id: 'cat-20', name: 'Refund', iconKey: 'rotate_ccw', flow: 'INCOME', essential: false, recurring: false, isBuiltIn: true, isCustom: false },
 ];
 
 // Combined — all categories in one array using spread

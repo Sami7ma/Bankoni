@@ -82,6 +82,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             justifyContent: 'space-between',
             alignItems: 'center',
             width: '100%',
+            paddingVertical: 2,
         },
         actionButton: {
             flexDirection: 'row',
@@ -89,17 +90,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             justifyContent: 'center',
             gap: 8,
             borderRadius: 14,
-            paddingVertical: 13,
-            paddingHorizontal: 10,
+            paddingVertical: 12,
+            paddingHorizontal: 16,
         },
         expenseText: {
             color: colors.danger,
             fontSize: 14,
-            fontWeight: '600',
+            fontWeight: '700',
+            letterSpacing: 0.2,
         },
         incomeText: {
             color: colors.success,
             fontSize: 14,
-            fontWeight: '600',
+            fontWeight: '700',
+            letterSpacing: 0.2,
         },
     });
