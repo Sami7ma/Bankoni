@@ -10,6 +10,7 @@ import { Category } from '../../types/Category';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import useTheme from '../../hooks/useTheme';
 import CategoryIcon from '../common/icons/CategoryIcon';
+import { formatEtb } from '../../utils/format';
 
 // Props = the data and functions this component needs from its parent.
 interface TransactionRowProps {
@@ -56,13 +57,7 @@ export default function TransactionRow({
 
     // Format the amount as Ethiopian Birr with two decimal places.
     // Example: "ETB 1,500.00"
-    const formattedAmount = `ETB ${transaction.amount.toLocaleString(
-        'en-US',
-        {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        }
-    )}`;
+    const formattedAmount = formatEtb(transaction.amount);
 
     return (
         <View style={[styles.wrapper, isExpanded && styles.wrapperExpanded]}>

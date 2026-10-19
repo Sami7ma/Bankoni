@@ -19,6 +19,7 @@ import { Category } from '../../types/Category';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import useTheme from '../../hooks/useTheme';
 import CategoryIcon from '../common/icons/CategoryIcon';
+import { formatEtb } from '../../utils/format';
 
 
 // Props = the data and functions this component needs from its parent.
@@ -98,12 +99,7 @@ export default function BudgetCard({
     //
     // Example:
     // 1500 -> ETB 1,500.00
-    const formatMoney = (amount: number) => {
-        return `ETB ${Math.abs(amount).toLocaleString('en-US', {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-        })}`;
-    };
+    const formatMoney = (amount: number) => formatEtb(amount, { abs: true });
 
     // Format a date for the budget period.
     //

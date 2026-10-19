@@ -12,6 +12,7 @@ import { Nfc } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
+import { formatEtb } from '../../utils/format';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH - 20;
@@ -29,11 +30,7 @@ interface BalanceCardsProps {
     totalExpenses: number;
 }
 
-const formatMoney = (amount: number) =>
-    `ETB ${Math.abs(amount).toLocaleString('en-US', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    })}`;
+const formatMoney = (amount: number) => formatEtb(amount, { abs: true });
 
 const BalanceCards = forwardRef<BalanceCardsRef, BalanceCardsProps>(
     ({ userName, totalBalance, totalIncome, totalExpenses }, ref) => {
