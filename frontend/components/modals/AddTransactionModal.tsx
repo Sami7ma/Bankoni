@@ -36,6 +36,7 @@ import useTheme from '../../hooks/useTheme';
 import CloseButton from '../common/buttons/CloseButton';
 import AmountInput from '../common/inputs/AmountInput';
 import CategoryPicker from '../common/selectors/CategoryPicker';
+import WalletPicker from '../common/selectors/WalletPicker';
 import NoteInput from '../common/inputs/NoteInput';
 import PrimaryButton from '../common/buttons/PrimaryButton';
 
@@ -63,17 +64,20 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
     const [amount, setAmount] = useState('');
     const [note, setNote] = useState('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+    const [selectedWalletId, setSelectedWalletId] = useState<string>('');
 
     // RESET FORM
-
     useEffect(() => {
         if (visible) {
             setType(defaultType);
             setAmount('');
             setNote('');
             setSelectedCategoryId('');
+            const activeWallets = wallets.filter((w) => !w.isArchived);
+            const defaultWallet = activeWallets.find((w) => w.isDefault) || activeWallets[0];
+            setSelectedWalletId(defaultWallet?.id || '');
         }
-    }, [defaultType, visible]);
+    }, [defaultType, visible, wallets]);
 
     // CATEGORY    
     const filteredCategories = categories.filter((category) =>
@@ -84,7 +88,6 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
 
     // SUBMIT
     const handleSubmit = async () => {
-
         const numAmount = parseFloat(amount);
         // Validate amount
         if (isNaN(numAmount) || numAmount <= 0 || !amount.trim()) {
@@ -96,35 +99,29 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
             alert('Please select a category');
             return;
         }
+        // Validate wallet
+        if (!selectedWalletId) {
+            alert('Please select a wallet / account');
+            return;
+        }
+
         const now = new Date().toISOString();
         const newTransaction = {
             amount: numAmount,
             type,
             categoryId: selectedCategoryId,
-            walletId: wallets.length > 0
-                ? wallets[0].id
-                : 'wallet-1',
+            walletId: selectedWalletId,
             date: now,
             note: note.trim() || undefined,
             status: 'CLEARED' as const,
-
         };
 
-        // Add transaction to Zustand.
-        // HomeScreen automatically receives the new state.
-        // Add transaction to Zustand.
-        // HomeScreen automatically receives the new state.
-
-        // Add transaction to Zustand.
-        // HomeScreen automatically receives the new state.
         try {
             await addTransaction(newTransaction);
             onClose();
         } catch (error) {
             alert('Failed to save transaction. Please try again.');
         }
-        // Close modal.
-        onClose();
     };
 
     // CURRENT TYPE COLOR
@@ -272,6 +269,15 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
                                 selectedId={selectedCategoryId}
                                 onSelect={setSelectedCategoryId}
                                 placeholder="Select a category"
+                                flow={type === 'DEBIT' ? 'EXPENSE' : 'INCOME'}
+                            />
+
+                            {/* WALLET / ACCOUNT PICKER */}
+                            <WalletPicker
+                                wallets={wallets}
+                                selectedId={selectedWalletId}
+                                onSelect={(id) => setSelectedWalletId(id || '')}
+                                label={type === 'CREDIT' ? 'Deposit Into' : 'Pay From'}
                             />
 
                             {/* NOTE — was ~15 lines, now 1 component */}

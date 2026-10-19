@@ -16,7 +16,9 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Pencil, Trash2 } from 'lucide-react-native';
 import { Budget } from '../../types/Budget';
 import { Category } from '../../types/Category';
+import useBanKoniStore from '../../store/useBanKoniStore';
 import useTheme from '../../hooks/useTheme';
+import CategoryIcon from '../common/icons/CategoryIcon';
 
 
 // Props = the data and functions this component needs from its parent.
@@ -43,6 +45,9 @@ export default function BudgetCard({
 
     // Create the styles using the current theme colors.
     const styles = createStyles(colors);
+
+    const wallets = useBanKoniStore((state) => state.wallets);
+    const wallet = wallets.find((w) => w.id === budget.walletId);
 
     // Manage local state for expanded / collapsed card
     const [isExpanded, setIsExpanded] = useState(false);
@@ -131,13 +136,39 @@ export default function BudgetCard({
             >
                 {/* Top row: category information */}
                 <View style={styles.topRow}>
+                    <View
+                        style={[
+                            styles.categoryIconWrap,
+                            {
+                                backgroundColor: category?.colorKey
+                                    ? `${category.colorKey}14`
+                                    : `${colors.champagne}14`,
+                            },
+                        ]}
+                    >
+                        <CategoryIcon
+                            iconKey={category?.iconKey}
+                            color={category?.colorKey ?? colors.champagne}
+                            size={20}
+                            flow={category?.flow ?? 'EXPENSE'}
+                        />
+                    </View>
                     <View style={styles.categoryInfo}>
-                        <Text
-                            style={styles.categoryName}
-                            numberOfLines={1}
-                        >
-                            {category?.name ?? 'Uncategorized'}
-                        </Text>
+                        <View style={styles.titleRow}>
+                            <Text
+                                style={styles.categoryName}
+                                numberOfLines={1}
+                            >
+                                {category?.name ?? 'Uncategorized'}
+                            </Text>
+                            {wallet ? (
+                                <View style={styles.walletBadge}>
+                                    <Text style={styles.walletBadgeText} numberOfLines={1}>
+                                        {wallet.name}
+                                    </Text>
+                                </View>
+                            ) : null}
+                        </View>
                         <Text
                             style={styles.period}
                             numberOfLines={1}
@@ -219,7 +250,7 @@ const createStyles = (
 
     card: {
         backgroundColor: colors.surface,
-        borderRadius: 14,
+        borderRadius: 16,
         marginBottom: 8,
         borderWidth: 1,
         borderColor: colors.border,
@@ -230,19 +261,46 @@ const createStyles = (
     },
     topRow: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'flex-start',
+        alignItems: 'center',
         marginBottom: 12,
+    },
+    categoryIconWrap: {
+        width: 42,
+        height: 42,
+        borderRadius: 13,
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 12,
     },
     categoryInfo: {
         flex: 1,
         gap: 3,
         paddingRight: 8,
     },
+    titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
     categoryName: {
         fontSize: 15,
         fontWeight: '600',
         color: colors.textPrimary,
+        flexShrink: 1,
+    },
+    walletBadge: {
+        paddingHorizontal: 6,
+        paddingVertical: 1.5,
+        borderRadius: 6,
+        backgroundColor: colors.surfaceAlt,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    walletBadgeText: {
+        fontSize: 10,
+        fontWeight: '600',
+        color: colors.champagne,
+        letterSpacing: 0.3,
     },
     period: {
         fontSize: 12,
@@ -267,7 +325,7 @@ const createStyles = (
     barBackground: {
         height: 7,
         borderRadius: 4,
-        backgroundColor: colors.border,
+        backgroundColor: colors.surfaceAlt,
         overflow: 'hidden',
         marginBottom: 10,
     },

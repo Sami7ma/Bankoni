@@ -10,6 +10,7 @@ import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import EditBudgetModal from '../modals/EditBudgetModal';
 import { Budget } from '../../types/Budget';
+import CategoryIcon from '../common/icons/CategoryIcon';
 
 export default function HomeBudgetPreview() {
     const colors = useTheme();
@@ -19,24 +20,39 @@ export default function HomeBudgetPreview() {
     const budgets = useBanKoniStore((state) => state.budgets);
     const transactions = useBanKoniStore((state) => state.transactions);
     const categories = useBanKoniStore((state) => state.categories);
+    const wallets = useBanKoniStore((state) => state.wallets);
     const deleteBudget = useBanKoniStore((state) => state.deleteBudget);
 
     const [expandedBudgetId, setExpandedBudgetId] = useState<string | null>(null);
     const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
 
-    const getCategoryName = (id: string) =>
-        categories.find((cat) => cat.id === id)?.name ?? 'Unknown';
+    const getCategoryById = (id: string) =>
+        categories.find((cat) => cat.id === id);
 
-    const getSpent = (categoryId: string) =>
+    const getCategoryName = (id: string) =>
+        getCategoryById(id)?.name ?? 'Unknown';
+
+    const getSpent = (categoryId: string, walletId?: string | null) =>
         transactions
-            .filter((tx) => tx.type === 'DEBIT' && tx.categoryId === categoryId)
+            .filter((tx) => {
+                if (tx.type !== 'DEBIT' || tx.categoryId !== categoryId) return false;
+                if (walletId && tx.walletId !== walletId) return false;
+                return true;
+            })
             .reduce((sum, tx) => sum + tx.amount, 0);
 
     const previewBudgets = budgets
         .map((b) => {
-            const spent = getSpent(b.categoryId);
+            const spent = getSpent(b.categoryId, b.walletId);
             const pct = b.limitAmount > 0 ? spent / b.limitAmount : 0;
-            return { ...b, spent, pct, name: getCategoryName(b.categoryId) };
+            const wallet = wallets.find((w) => w.id === b.walletId);
+            return {
+                ...b,
+                spent,
+                pct,
+                name: getCategoryName(b.categoryId),
+                walletName: wallet?.name,
+            };
         })
         .sort((a, b) => b.pct - a.pct)
         .slice(0, 4);
@@ -87,9 +103,40 @@ export default function HomeBudgetPreview() {
                             activeOpacity={0.8}
                         >
                             <View style={styles.rowTop}>
-                                <Text style={styles.budgetName} numberOfLines={1}>
-                                    {item.name}
-                                </Text>
+                                {(() => {
+                                    const cat = getCategoryById(item.categoryId);
+                                    return (
+                                        <View
+                                            style={[
+                                                styles.categoryIconWrap,
+                                                {
+                                                    backgroundColor: cat?.colorKey
+                                                        ? `${cat.colorKey}14`
+                                                        : `${colors.champagne}14`,
+                                                },
+                                            ]}
+                                        >
+                                            <CategoryIcon
+                                                iconKey={cat?.iconKey}
+                                                color={cat?.colorKey ?? colors.champagne}
+                                                size={18}
+                                                flow={cat?.flow ?? 'EXPENSE'}
+                                            />
+                                        </View>
+                                    );
+                                })()}
+                                <View style={styles.titleRow}>
+                                    <Text style={styles.budgetName} numberOfLines={1}>
+                                        {item.name}
+                                    </Text>
+                                    {item.walletName ? (
+                                        <View style={styles.walletBadge}>
+                                            <Text style={styles.walletBadgeText} numberOfLines={1}>
+                                                {item.walletName}
+                                            </Text>
+                                        </View>
+                                    ) : null}
+                                </View>
                                 <Text style={[styles.budgetPct, { color: barColor }]}>
                                     {Math.round(item.pct * 100)}%
                                 </Text>
@@ -174,7 +221,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         },
         row: {
             backgroundColor: colors.surface,
-            borderRadius: 14,
+            borderRadius: 16,
             padding: 14,
             marginBottom: 8,
             borderWidth: 1,
@@ -185,14 +232,42 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         },
         rowTop: {
             flexDirection: 'row',
-            justifyContent: 'space-between',
             alignItems: 'center',
             marginBottom: 8,
+        },
+        categoryIconWrap: {
+            width: 38,
+            height: 38,
+            borderRadius: 12,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginRight: 10,
+        },
+        titleRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            flex: 1,
+            marginRight: 8,
         },
         budgetName: {
             fontSize: 14,
             fontWeight: '600',
             color: colors.textPrimary,
+        },
+        walletBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 1.5,
+            borderRadius: 6,
+            backgroundColor: colors.surfaceAlt,
+            borderWidth: 1,
+            borderColor: colors.border,
+        },
+        walletBadgeText: {
+            fontSize: 10,
+            fontWeight: '600',
+            color: colors.champagne,
+            letterSpacing: 0.3,
         },
         budgetPct: {
             fontSize: 13,

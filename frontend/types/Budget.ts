@@ -10,4 +10,5 @@ export interface Budget {
     endDate: string;              // When does this budget end?
     recurring?: 'none' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'yearly';
     alertThreshold?: number;      // Optional: alert at what %? e.g. 0.8 = warn at 80% spent
+    walletId?: string | null;     // Optional: specific wallet limit or null/undefined for all wallets
 }

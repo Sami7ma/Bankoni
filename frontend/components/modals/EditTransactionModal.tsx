@@ -9,6 +9,7 @@ import useTheme from '../../hooks/useTheme';
 import CloseButton from '../common/buttons/CloseButton';
 import AmountInput from '../common/inputs/AmountInput';
 import CategoryPicker from '../common/selectors/CategoryPicker';
+import WalletPicker from '../common/selectors/WalletPicker';
 import NoteInput from '../common/inputs/NoteInput';
 import PrimaryButton from '../common/buttons/PrimaryButton';
 
@@ -27,12 +28,14 @@ export default function EditTransactionModal({
     const styles = createStyles(colors);
 
     const categories = useBanKoniStore((state) => state.categories);
+    const wallets = useBanKoniStore((state) => state.wallets);
     const updateTransaction = useBanKoniStore((state) => state.updateTransaction);
 
     const [type, setType] = useState<'CREDIT' | 'DEBIT'>('DEBIT');
     const [amount, setAmount] = useState('');
     const [note, setNote] = useState('');
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
+    const [selectedWalletId, setSelectedWalletId] = useState<string>('');
 
     useEffect(() => {
         if (transaction && visible) {
@@ -40,6 +43,7 @@ export default function EditTransactionModal({
             setAmount(transaction.amount.toString());
             setNote(transaction.note || '');
             setSelectedCategoryId(transaction.categoryId);
+            setSelectedWalletId(transaction.walletId || '');
         }
     }, [transaction, visible]);
 
@@ -61,11 +65,16 @@ export default function EditTransactionModal({
             alert('Please select a category');
             return;
         }
+        if (!selectedWalletId) {
+            alert('Please select a wallet / account');
+            return;
+        }
 
         updateTransaction(transaction.id, {
             type,
             amount: numAmount,
             categoryId: selectedCategoryId,
+            walletId: selectedWalletId,
             note: note.trim() || undefined,
         });
 
@@ -189,6 +198,15 @@ export default function EditTransactionModal({
                                 selectedId={selectedCategoryId}
                                 onSelect={setSelectedCategoryId}
                                 placeholder="Select a category"
+                                flow={type === 'DEBIT' ? 'EXPENSE' : 'INCOME'}
+                            />
+
+                            {/* WALLET / ACCOUNT */}
+                            <WalletPicker
+                                wallets={wallets}
+                                selectedId={selectedWalletId}
+                                onSelect={(id) => setSelectedWalletId(id || '')}
+                                label={type === 'CREDIT' ? 'Deposit Into' : 'Pay From'}
                             />
 
                             {/* NOTE */}

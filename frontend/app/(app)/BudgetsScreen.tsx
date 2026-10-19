@@ -48,6 +48,9 @@ export default function BudgetsScreen() {
             if (tx.categoryId !== budget.categoryId) {
                 return false;
             }
+            if (budget.walletId && tx.walletId !== budget.walletId) {
+                return false;
+            }
             const txDate =
                 new Date(tx.date)
                     .toISOString()

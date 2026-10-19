@@ -9,6 +9,7 @@ import { Budget } from '../../types/Budget';
 import CloseButton from '../common/buttons/CloseButton';
 import AmountInput from '../common/inputs/AmountInput';
 import CategoryPicker from '../common/selectors/CategoryPicker';
+import WalletPicker from '../common/selectors/WalletPicker';
 import PeriodSelector from '../common/selectors/PeriodSelector';
 import PrimaryButton from '../common/buttons/PrimaryButton';
 
@@ -30,9 +31,11 @@ export default function EditBudgetModal({
 
     const categories = useBanKoniStore((state) => state.categories);
     const budgets = useBanKoniStore((state) => state.budgets);
+    const wallets = useBanKoniStore((state) => state.wallets);
     const updateBudget = useBanKoniStore((state) => state.updateBudget);
 
     const [selectedCategoryId, setSelectedCategoryId] = useState('');
+    const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
     const [limitAmount, setLimitAmount] = useState('');
     const [period, setPeriod] = useState<BudgetPeriod>('monthly');
     const [startDate, setStartDate] = useState('');
@@ -41,6 +44,7 @@ export default function EditBudgetModal({
     useEffect(() => {
         if (budget && visible) {
             setSelectedCategoryId(budget.categoryId);
+            setSelectedWalletId(budget.walletId || null);
             setLimitAmount(budget.limitAmount.toString());
             const p = budget.recurring === 'none' ? 'custom' : (budget.recurring as BudgetPeriod);
             setPeriod(p || 'monthly');
@@ -80,6 +84,7 @@ export default function EditBudgetModal({
             recurring: recurring,
             startDate,
             endDate,
+            walletId: selectedWalletId || null,
         });
 
         onClose();
@@ -129,6 +134,17 @@ export default function EditBudgetModal({
                                 selectedId={selectedCategoryId}
                                 onSelect={setSelectedCategoryId}
                                 placeholder="Choose a category"
+                                flow="EXPENSE"
+                            />
+
+                            {/* WALLET SELECTION (OPTIONAL / ALL WALLETS) */}
+                            <WalletPicker
+                                wallets={wallets}
+                                selectedId={selectedWalletId}
+                                onSelect={setSelectedWalletId}
+                                allowAll={true}
+                                allLabel="All Wallets"
+                                label="Apply to Wallet"
                             />
 
                             {/* AMOUNT */}

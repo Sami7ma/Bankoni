@@ -210,8 +210,9 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
                                 <Switch
                                     value={isDefault}
                                     onValueChange={setIsDefault}
-                                    thumbColor={isDefault ? colors.champagne : colors.surfaceAlt}
-                                    trackColor={{ false: colors.border, true: colors.subtleGold }}
+                                    thumbColor="#FFFFFF"
+                                    trackColor={{ false: colors.switchTrackOff, true: colors.champagne }}
+                                    ios_backgroundColor={colors.switchTrackOff}
                                 />
                             </View>
 

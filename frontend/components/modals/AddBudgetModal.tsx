@@ -28,10 +28,10 @@ import {
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 
-// ── REUSABLE COMPONENTS ──────────────────────────────────
 import CloseButton from '../common/buttons/CloseButton';
 import AmountInput from '../common/inputs/AmountInput';
 import CategoryPicker from '../common/selectors/CategoryPicker';
+import WalletPicker from '../common/selectors/WalletPicker';
 import PeriodSelector from '../common/selectors/PeriodSelector';
 import PrimaryButton from '../common/buttons/PrimaryButton';
 
@@ -54,11 +54,13 @@ export default function AddBudgetModal({
     // ZUSTAND
     const categories = useBanKoniStore((state) => state.categories);
     const budgets = useBanKoniStore((state) => state.budgets);
+    const wallets = useBanKoniStore((state) => state.wallets);
     const addBudget = useBanKoniStore((state) => state.addBudget);
 
     // LOCAL STATE — only the form fields remain here.
     // Date/period state is now managed inside PeriodSelector.
     const [selectedCategoryId, setSelectedCategoryId] = useState('');
+    const [selectedWalletId, setSelectedWalletId] = useState<string | null>(null);
     const [limitAmount, setLimitAmount] = useState('');
     const [period, setPeriod] = useState<BudgetPeriod>('monthly');
     const [startDate, setStartDate] = useState(
@@ -82,6 +84,7 @@ export default function AddBudgetModal({
     // RESET FORM
     const resetForm = () => {
         setSelectedCategoryId('');
+        setSelectedWalletId(null);
         setLimitAmount('');
         setPeriod('monthly');
         const today = new Date().toISOString().split('T')[0];
@@ -113,6 +116,7 @@ export default function AddBudgetModal({
                 recurring: recurring,
                 startDate,
                 endDate,
+                walletId: selectedWalletId || null,
             });
             resetForm();
             onClose();
@@ -167,6 +171,17 @@ export default function AddBudgetModal({
                                 selectedId={selectedCategoryId}
                                 onSelect={setSelectedCategoryId}
                                 placeholder="Choose a category"
+                                flow="EXPENSE"
+                            />
+
+                            {/* WALLET SELECTION (OPTIONAL / ALL WALLETS) */}
+                            <WalletPicker
+                                wallets={wallets}
+                                selectedId={selectedWalletId}
+                                onSelect={setSelectedWalletId}
+                                allowAll={true}
+                                allLabel="All Wallets"
+                                label="Apply to Wallet"
                             />
 
                             {/* AMOUNT — was ~15 lines of inline JSX */}
