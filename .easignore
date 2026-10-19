@@ -1,0 +1,72 @@
+# EAS Build upload filter.
+#
+# When this file exists, EAS CLI uses it INSTEAD of .gitignore (it does not
+# merge them), so everything from .gitignore (root + frontend/.gitignore) is
+# repeated here, followed by the extra exclusions below.
+
+# --- copied from .gitignore (root and frontend/) ---
+
+# dependencies
+node_modules/
+**/node_modules/
+
+# Expo
+.expo/
+**/.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS & OS
+.DS_Store
+*.pem
+
+# local env files
+.env
+.env*.local
+*.env
+!*.env.example
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+frontend/ios
+frontend/android
+
+# local agent tooling
+claude
+claude.md
+CLAUDE
+CLAUDE.md
+
+# --- extra exclusions: things EAS Build does not need ---
+
+# Documentation and README screenshots. These are only referenced from
+# README.md on GitHub; the app never imports them. Keeping them out of the
+# upload keeps the build archive small and guarantees they can never end up
+# in the APK/AAB.
+/docs
+/README.md
+
+# Test coverage reports
+coverage/
