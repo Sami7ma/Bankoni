@@ -25,6 +25,7 @@ import {
     ChevronUp,
     Database,
     Fingerprint,
+    FolderInput,
     LockKeyhole,
     Mail,
     Moon,
@@ -33,11 +34,14 @@ import {
     UserRound,
 } from 'lucide-react-native';
 import * as SecureStore from 'expo-secure-store';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import PrimaryButton from '../../components/common/buttons/PrimaryButton';
 import { validateNewPin } from '../../security/pinSecurity';
+import type { ExportDataPayload } from '../../types/User';
 
 type SectionKey = 'profile' | 'security' | 'preferences' | 'data';
 
@@ -66,6 +70,9 @@ export default function SettingsScreen() {
     const exportDataToJSONFile = useBanKoniStore(
         (state) => state.exportDataToJSONFile,
     );
+    const importDataFromJSON = useBanKoniStore(
+        (state) => state.importDataFromJSON,
+    );
 
     // Keep only one accordion section open at a time.
     const [expanded, setExpanded] = useState<SectionKey | null>('profile');
@@ -80,6 +87,7 @@ export default function SettingsScreen() {
     const [changingPin, setChangingPin] = useState(false);
     const [changingBiometrics, setChangingBiometrics] = useState(false);
     const [exporting, setExporting] = useState(false);
+    const [importing, setImporting] = useState(false);
 
     // Budget alerts configuration state
     const [budgetAlertsEnabled, setBudgetAlertsEnabled] = useState(true);
@@ -215,7 +223,7 @@ export default function SettingsScreen() {
     };
 
     const exportBackup = async () => {
-        if (exporting) return;
+        if (exporting || importing) return;
 
         setExporting(true);
         try {
@@ -224,8 +232,8 @@ export default function SettingsScreen() {
                 Alert.alert('Export failed', 'BanKoni could not create the backup.');
             } else {
                 Alert.alert(
-                    'Backup prepared',
-                    `${fileName}\nStore it somewhere safe. It contains financial records.`,
+                    'Backup Prepared',
+                    `${fileName}\n\nStored and shared safely. It contains your financial records and preferences (excluding your PIN).`,
                 );
             }
         } catch (error) {
@@ -235,6 +243,105 @@ export default function SettingsScreen() {
             );
         } finally {
             setExporting(false);
+        }
+    };
+
+    const handleImportBackup = async () => {
+        if (importing || exporting) return;
+
+        try {
+            const pickerResult = await DocumentPicker.getDocumentAsync({
+                type: ['application/json', 'text/json', '*/*'],
+                copyToCacheDirectory: true,
+            });
+
+            if (pickerResult.canceled || !pickerResult.assets || pickerResult.assets.length === 0) {
+                return;
+            }
+
+            const asset = pickerResult.assets[0];
+            const fileUri = asset.uri;
+
+            setImporting(true);
+
+            const content = await FileSystem.readAsStringAsync(fileUri, {
+                encoding: FileSystem.EncodingType.UTF8,
+            });
+
+            let payload: ExportDataPayload;
+            try {
+                payload = JSON.parse(content);
+            } catch {
+                Alert.alert(
+                    'Invalid File',
+                    'The selected file could not be parsed as JSON. Please ensure you selected a valid BanKoni backup file.',
+                );
+                return;
+            }
+
+            if (
+                !payload ||
+                typeof payload !== 'object' ||
+                !Array.isArray(payload.wallets) ||
+                !Array.isArray(payload.categories) ||
+                !Array.isArray(payload.transactions)
+            ) {
+                Alert.alert(
+                    'Invalid Backup Format',
+                    'This file is missing required BanKoni financial records (wallets, categories, or transactions).',
+                );
+                return;
+            }
+
+            const txCount = payload.transactions.length;
+            const walletCount = payload.wallets.length;
+            const budgetCount = Array.isArray(payload.budgets) ? payload.budgets.length : 0;
+            const backupDate = payload.exportedAt
+                ? new Date(payload.exportedAt).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                  })
+                : 'Unknown date';
+            const vaultOwner = payload.user?.name ? `\nVault Owner: ${payload.user.name}` : '';
+
+            Alert.alert(
+                'Restore Backup',
+                `Found backup created on ${backupDate}.${vaultOwner}\n\nContents:\n• ${txCount} transaction${txCount !== 1 ? 's' : ''}\n• ${walletCount} wallet${walletCount !== 1 ? 's' : ''}\n• ${budgetCount} budget${budgetCount !== 1 ? 's' : ''}\n\nRestoring will replace current financial records with this backup. Your device PIN will NOT be changed.`,
+                [
+                    { text: 'Cancel', style: 'cancel' },
+                    {
+                        text: 'Restore Data',
+                        style: 'destructive',
+                        onPress: async () => {
+                            try {
+                                setImporting(true);
+                                const summary = await importDataFromJSON(payload);
+                                Alert.alert(
+                                    'Restore Successful',
+                                    `Restored ${summary.restoredTransactions} transactions, ${summary.restoredWallets} wallets, and ${summary.restoredBudgets} budgets. All financial data is updated.`,
+                                );
+                            } catch (err) {
+                                Alert.alert(
+                                    'Restore Failed',
+                                    err instanceof Error ? err.message : 'Could not restore backup.',
+                                );
+                            } finally {
+                                setImporting(false);
+                            }
+                        },
+                    },
+                ],
+            );
+        } catch (err) {
+            Alert.alert(
+                'Import Failed',
+                err instanceof Error ? err.message : 'Could not select or read the backup file.',
+            );
+        } finally {
+            setImporting(false);
         }
     };
 
@@ -428,9 +535,10 @@ export default function SettingsScreen() {
                                     onValueChange={handleBiometricsChange}
                                     disabled={changingBiometrics || !user}
                                     trackColor={{
-                                        false: colors.border,
+                                        false: colors.switchTrackOff,
                                         true: colors.champagne,
                                     }}
+                                    ios_backgroundColor={colors.switchTrackOff}
                                     thumbColor="#FFFFFF"
                                     accessibilityLabel="Enable biometric unlock"
                                 />
@@ -470,9 +578,10 @@ export default function SettingsScreen() {
                                 value={theme === 'dark'}
                                 onValueChange={toggleTheme}
                                 trackColor={{
-                                    false: colors.border,
+                                    false: colors.switchTrackOff,
                                     true: colors.champagne,
                                 }}
+                                ios_backgroundColor={colors.switchTrackOff}
                                 thumbColor="#FFFFFF"
                                 accessibilityLabel="Enable dark theme"
                             />
@@ -493,9 +602,10 @@ export default function SettingsScreen() {
                                 value={budgetAlertsEnabled}
                                 onValueChange={handleToggleBudgetAlerts}
                                 trackColor={{
-                                    false: colors.border,
+                                    false: colors.switchTrackOff,
                                     true: colors.champagne,
                                 }}
+                                ios_backgroundColor={colors.switchTrackOff}
                                 thumbColor="#FFFFFF"
                                 accessibilityLabel="Enable budget alerts"
                             />
@@ -517,9 +627,10 @@ export default function SettingsScreen() {
                                 onValueChange={handleTogglePopupAlerts}
                                 disabled={!budgetAlertsEnabled}
                                 trackColor={{
-                                    false: colors.border,
+                                    false: colors.switchTrackOff,
                                     true: colors.champagne,
                                 }}
+                                ios_backgroundColor={colors.switchTrackOff}
                                 thumbColor="#FFFFFF"
                                 accessibilityLabel="Enable in-app popup warnings"
                             />
@@ -572,18 +683,35 @@ export default function SettingsScreen() {
                     <Database size={22} color={colors.champagne} />,
                     <>
                         <Text style={styles.infoText}>
-                            Export your local vault to a JSON file. The export contains financial records, so share and store it carefully.
+                            Export your local vault to a JSON file to transfer to another device or keep a safe backup. The export contains all your financial records and settings (excluding your PIN).
                         </Text>
 
-                        <PrimaryButton
-                            label={exporting ? 'Preparing backup...' : 'Export Backup'}
-                            onPress={exportBackup}
-                            disabled={exporting}
-                            style={styles.primaryAction}
-                        />
+                        <View style={styles.dataButtonsCol}>
+                            <PrimaryButton
+                                label={exporting ? 'Preparing backup...' : 'Export Backup'}
+                                onPress={exportBackup}
+                                disabled={exporting || importing}
+                                style={styles.primaryAction}
+                            />
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.importButton,
+                                    (exporting || importing) && styles.disabledButton,
+                                ]}
+                                onPress={handleImportBackup}
+                                disabled={exporting || importing}
+                                activeOpacity={0.8}
+                            >
+                                <FolderInput size={18} color={colors.champagne} />
+                                <Text style={styles.importButtonText}>
+                                    {importing ? 'Selecting backup...' : 'Import Backup'}
+                                </Text>
+                            </TouchableOpacity>
+                        </View>
 
                         <Text style={styles.helperNote}>
-                            Restore is intentionally not exposed until backup validation, preview, and safe database replacement are implemented.
+                            Backups can be restored on this or another installation. Your device access PIN remains safe and will never be overwritten.
                         </Text>
                     </>,
                 )}
@@ -776,5 +904,30 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         thresholdPillTextSelected: {
             color: colors.champagne,
             fontWeight: '700',
+        },
+        dataButtonsCol: {
+            gap: 10,
+            marginTop: 10,
+        },
+        importButton: {
+            minHeight: 48,
+            borderRadius: 14,
+            borderWidth: 1.5,
+            borderColor: colors.champagne,
+            backgroundColor: `${colors.champagne}10`,
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            paddingHorizontal: 16,
+        },
+        importButtonText: {
+            fontSize: 15,
+            fontWeight: '700',
+            color: colors.champagne,
+            letterSpacing: 0.3,
+        },
+        disabledButton: {
+            opacity: 0.5,
         },
     });
