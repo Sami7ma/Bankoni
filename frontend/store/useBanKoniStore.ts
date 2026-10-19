@@ -38,6 +38,8 @@ import {
     archiveWalletDB,
     deleteWalletDB,
     exportDatabaseToJSON,
+    importDatabaseFromJSON,
+    type ImportSummary,
     updateUserPinHashDB,
     getPinAttemptStateDB,
     recordFailedPinAttemptDB,
@@ -97,7 +99,7 @@ interface BanKoniStore {
     deleteBudget: (id: string) => Promise<void>;
 
     // Category and wallet CRUD
-    addCategory: (category: Omit<Category, 'id'>) => Promise<void>;
+    addCategory: (category: Omit<Category, 'id'>) => Promise<Category>;
     deleteCategory: (id: string) => Promise<void>;
     addWallet: (wallet: Omit<Wallet, 'id' | 'createdAt' | 'balance'> & { balance?: number }) => Promise<void>;
     updateWallet: (id: string, updated: Partial<Omit<Wallet, 'id' | 'createdAt'>>) => Promise<void>;
@@ -105,9 +107,10 @@ interface BanKoniStore {
     archiveWallet: (id: string, isArchived: boolean) => Promise<void>;
     deleteWallet: (id: string) => Promise<void>;
 
-    // Export
+    // Export & Import
     exportDataToJSONFile: () => Promise<string | null>;
     getExportPayload: () => Promise<ExportDataPayload>;
+    importDataFromJSON: (payload: ExportDataPayload) => Promise<ImportSummary>;
 
     // Derived values (ETB cleared activity only where applicable)
     totalIncome: () => number;
@@ -467,6 +470,7 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         const fullCategory: Category = { ...category, id: makeId('category') };
         await insertCategoryDB(fullCategory);
         set({ categories: await getCategoriesDB() });
+        return fullCategory;
     },
 
     deleteCategory: async (id) => {
@@ -579,11 +583,41 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         set({ wallets: await getWalletsDB() });
     },
 
-    getExportPayload: async () => exportDatabaseToJSON(),
+    getExportPayload: async () => {
+        const [themePref, budgetAlertsPref, popupAlertsPref, alertThresholdPref] = await Promise.all([
+            SecureStore.getItemAsync('bankoni_theme'),
+            SecureStore.getItemAsync('bankoni_budget_alerts_enabled'),
+            SecureStore.getItemAsync('bankoni_popup_alerts_enabled'),
+            SecureStore.getItemAsync('bankoni_alert_threshold'),
+        ]);
+
+        const settings = {
+            theme: (themePref === 'light' || themePref === 'dark') ? themePref : get().theme,
+            budgetAlertsEnabled: budgetAlertsPref !== null ? budgetAlertsPref === 'true' : true,
+            popupAlertsEnabled: popupAlertsPref !== null ? popupAlertsPref === 'true' : true,
+            alertThreshold: alertThresholdPref !== null ? parseFloat(alertThresholdPref) : 0.8,
+        };
+
+        return exportDatabaseToJSON(settings);
+    },
 
     exportDataToJSONFile: async () => {
         try {
-            const data = await exportDatabaseToJSON();
+            const [themePref, budgetAlertsPref, popupAlertsPref, alertThresholdPref] = await Promise.all([
+                SecureStore.getItemAsync('bankoni_theme'),
+                SecureStore.getItemAsync('bankoni_budget_alerts_enabled'),
+                SecureStore.getItemAsync('bankoni_popup_alerts_enabled'),
+                SecureStore.getItemAsync('bankoni_alert_threshold'),
+            ]);
+
+            const settings = {
+                theme: (themePref === 'light' || themePref === 'dark') ? themePref : get().theme,
+                budgetAlertsEnabled: budgetAlertsPref !== null ? budgetAlertsPref === 'true' : true,
+                popupAlertsEnabled: popupAlertsPref !== null ? popupAlertsPref === 'true' : true,
+                alertThreshold: alertThresholdPref !== null ? parseFloat(alertThresholdPref) : 0.8,
+            };
+
+            const data = await exportDatabaseToJSON(settings);
             const jsonString = JSON.stringify(data, null, 2);
             const fileName = `BanKoni_export_${Date.now()}.json`;
             const baseDirectory = FileSystem.documentDirectory ?? FileSystem.cacheDirectory;
@@ -605,6 +639,50 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         } catch (error) {
             console.error('BanKoni export failed:', error);
             throw new Error(errorMessage(error, 'The data export failed.'));
+        }
+    },
+
+    importDataFromJSON: async (payload: ExportDataPayload) => {
+        try {
+            const summary = await importDatabaseFromJSON(payload);
+
+            // Restore user preferences if present in the backup
+            if (summary.settings) {
+                if (summary.settings.theme) {
+                    await get().setTheme(summary.settings.theme);
+                }
+                if (summary.settings.budgetAlertsEnabled !== undefined) {
+                    await SecureStore.setItemAsync('bankoni_budget_alerts_enabled', String(summary.settings.budgetAlertsEnabled));
+                }
+                if (summary.settings.popupAlertsEnabled !== undefined) {
+                    await SecureStore.setItemAsync('bankoni_popup_alerts_enabled', String(summary.settings.popupAlertsEnabled));
+                }
+                if (summary.settings.alertThreshold !== undefined) {
+                    await SecureStore.setItemAsync('bankoni_alert_threshold', String(summary.settings.alertThreshold));
+                }
+            }
+
+            // Refresh all store collections directly from SQLite database
+            const [wallets, categories, budgets, transactions, userRow] = await Promise.all([
+                getWalletsDB(),
+                getCategoriesDB(),
+                getBudgetsDB(),
+                getTransactionsDB(),
+                getActiveUserDB(),
+            ]);
+
+            set({
+                wallets,
+                categories,
+                budgets,
+                transactions,
+                user: userRow?.user ?? get().user,
+            });
+
+            return summary;
+        } catch (error) {
+            console.error('BanKoni import failed:', error);
+            throw new Error(errorMessage(error, 'The backup restoration failed.'));
         }
     },
 

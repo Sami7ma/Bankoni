@@ -6,11 +6,11 @@ import type { Transaction } from '../types/Transaction';
 import type { Budget } from '../types/Budget';
 import type { Category } from '../types/Category';
 import type { Wallet } from '../types/Wallet';
-import type { User, ExportDataPayload } from '../types/User';
-import { defaultCategories } from '../constants/defaultCategories';
+import type { User, ExportDataPayload, UserPreferencesPayload } from '../types/User';
+import { defaultCategories, defaultIncomeCategories } from '../constants/defaultCategories';
 
 const DB_NAME = 'bankoni.db';
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 1;
 
 let dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
 let initPromise: Promise<void> | null = null;
@@ -47,6 +47,7 @@ interface BudgetRow {
     end_date: string;
     recurring: string | null;
     alert_threshold: number | null;
+    wallet_id: string | null;
 }
 
 interface CategoryRow {
@@ -97,7 +98,7 @@ export function getDatabase(): Promise<SQLite.SQLiteDatabase> {
     return dbPromise;
 }
 
-const SCHEMA_SQL = `
+const CREATE_TABLES_SQL = `
   CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     name TEXT NOT NULL,
@@ -156,7 +157,8 @@ const SCHEMA_SQL = `
     start_date TEXT NOT NULL,
     end_date TEXT NOT NULL,
     recurring TEXT DEFAULT 'monthly',
-    alert_threshold REAL DEFAULT 0.8 CHECK (alert_threshold IS NULL OR (alert_threshold >= 0 AND alert_threshold <= 1))
+    alert_threshold REAL DEFAULT 0.8 CHECK (alert_threshold IS NULL OR (alert_threshold >= 0 AND alert_threshold <= 1)),
+    wallet_id TEXT REFERENCES wallets(id)
   );
 
   CREATE TABLE IF NOT EXISTS auth_security (
@@ -165,16 +167,19 @@ const SCHEMA_SQL = `
     lockout_until_ms INTEGER NOT NULL DEFAULT 0
   );
   INSERT OR IGNORE INTO auth_security (id, failed_pin_attempts, lockout_until_ms) VALUES (1, 0, 0);
+`;
 
+const INDEXES_AND_TRIGGERS_SQL = `
   CREATE INDEX IF NOT EXISTS idx_transactions_date_created
     ON transactions(date DESC, created_at DESC);
   CREATE INDEX IF NOT EXISTS idx_transactions_category ON transactions(category_id);
   CREATE INDEX IF NOT EXISTS idx_transactions_wallet ON transactions(wallet_id);
   CREATE INDEX IF NOT EXISTS idx_budgets_category ON budgets(category_id);
+  CREATE INDEX IF NOT EXISTS idx_budgets_wallet ON budgets(wallet_id);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_profile ON users ((1));
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_single_default ON wallets(is_default) WHERE is_default = 1;
 
-  -- These guards complement PRAGMA foreign_keys. Expo's exclusive transaction
-  -- path can use a separate SQLite connection, so correctness must not rely on
-  -- a connection-local PRAGMA alone.
+  -- These guards complement PRAGMA foreign_keys.
   CREATE TRIGGER IF NOT EXISTS trg_transactions_validate_insert
   BEFORE INSERT ON transactions
   WHEN NOT EXISTS (
@@ -217,6 +222,68 @@ const SCHEMA_SQL = `
   BEGIN SELECT RAISE(ABORT, 'Wallet is default or is still referenced'); END;
 `;
 
+async function ensureColumnsExist(db: SQLite.SQLiteDatabase): Promise<void> {
+    const getCols = async (tbl: string) => {
+        try {
+            const rows = await db.getAllAsync<{ name: string }>(`PRAGMA table_info(${tbl});`);
+            return new Set(rows.map((r) => r.name.toLowerCase()));
+        } catch {
+            return new Set<string>();
+        }
+    };
+
+    // Budgets table
+    const budgetCols = await getCols('budgets');
+    if (budgetCols.size > 0 && !budgetCols.has('wallet_id')) {
+        await db.runAsync('ALTER TABLE budgets ADD COLUMN wallet_id TEXT REFERENCES wallets(id);');
+    }
+
+    // Wallets table
+    const walletCols = await getCols('wallets');
+    if (walletCols.size > 0) {
+        if (!walletCols.has('provider_id')) {
+            await db.runAsync("ALTER TABLE wallets ADD COLUMN provider_id TEXT NOT NULL DEFAULT 'custom';");
+        }
+        if (!walletCols.has('opening_balance')) {
+            await db.runAsync('ALTER TABLE wallets ADD COLUMN opening_balance REAL NOT NULL DEFAULT 0.0;');
+        }
+        if (!walletCols.has('account_number_last4')) {
+            await db.runAsync('ALTER TABLE wallets ADD COLUMN account_number_last4 TEXT;');
+        }
+        if (!walletCols.has('is_archived')) {
+            await db.runAsync('ALTER TABLE wallets ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;');
+        }
+    }
+
+    // Categories table
+    const categoryCols = await getCols('categories');
+    if (categoryCols.size > 0) {
+        if (!categoryCols.has('color_key')) {
+            await db.runAsync('ALTER TABLE categories ADD COLUMN color_key TEXT;');
+        }
+        if (!categoryCols.has('is_custom')) {
+            await db.runAsync('ALTER TABLE categories ADD COLUMN is_custom INTEGER NOT NULL DEFAULT 0;');
+        }
+    }
+
+    // Transactions table
+    const txCols = await getCols('transactions');
+    if (txCols.size > 0) {
+        if (!txCols.has('wallet_id')) {
+            await db.runAsync("ALTER TABLE transactions ADD COLUMN wallet_id TEXT NOT NULL DEFAULT 'wallet-cash-default' REFERENCES wallets(id);");
+        }
+        if (!txCols.has('current_balance')) {
+            await db.runAsync('ALTER TABLE transactions ADD COLUMN current_balance REAL;');
+        }
+        if (!txCols.has('source')) {
+            await db.runAsync("ALTER TABLE transactions ADD COLUMN source TEXT DEFAULT 'manual';");
+        }
+        if (!txCols.has('raw_sms')) {
+            await db.runAsync('ALTER TABLE transactions ADD COLUMN raw_sms TEXT;');
+        }
+    }
+}
+
 /** Initializes schema and legitimate defaults. No transactions or budgets are fabricated. */
 export function initDatabase(): Promise<void> {
     if (!initPromise) {
@@ -234,22 +301,17 @@ async function initializeDatabase(): Promise<void> {
 
     await db.withExclusiveTransactionAsync(async (rawTransaction) => {
         const tx = rawTransaction as unknown as SQLite.SQLiteDatabase;
-        const versionRow = await tx.getFirstAsync<{ user_version: number }>('PRAGMA user_version;');
-        const previousVersion = Number(versionRow?.user_version ?? 0);
-        if (previousVersion > DATABASE_VERSION) {
-            throw new Error(`This BanKoni database schema (version ${previousVersion}) is newer than this app supports.`);
-        }
 
-        // Fast path: if schema is already up-to-date, avoid re-running DDL and category seed queries on every boot
-        if (previousVersion === DATABASE_VERSION) {
-            return;
-        }
+        // 1. Create base tables if they don't already exist
+        await tx.execAsync(CREATE_TABLES_SQL);
 
-        await tx.execAsync(SCHEMA_SQL);
+        // 2. Self-healing check: ensure all columns exist on tables before creating indexes
+        await ensureColumnsExist(tx);
 
-        // The original app's schema did not scope records to a user. Fail closed if
-        // an old database already contains multiple profiles; silently selecting
-        // one could expose the wrong person's financial records.
+        // 3. Create indexes and triggers safely (now that all columns exist)
+        await tx.execAsync(INDEXES_AND_TRIGGERS_SQL);
+
+        // 4. Validate single profile constraint
         const userCount = await tx.getFirstAsync<{ count: number }>(
             'SELECT COUNT(*) AS count FROM users;',
         );
@@ -259,29 +321,11 @@ async function initializeDatabase(): Promise<void> {
             );
         }
 
-        // A constant-expression unique index enforces one vault per installation.
-        await tx.execAsync(
-            'CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_profile ON users ((1));',
-        );
-
+        // 5. Default wallet & seed data
         await normalizeDefaultWallet(tx);
-
-        // Before this version, transaction CRUD did not update wallet balances.
-        // Reconcile each wallet exactly once as part of the versioned migration.
-        // The migration is committed with PRAGMA user_version so it cannot be
-        // applied twice after a successful commit.
-        if (previousVersion < 2) {
-            await reconcileWalletBalances(tx);
-        }
-
-        if (previousVersion < 3) {
-            await migrateToVersion3(tx);
-        }
-
         await seedInitialData(tx);
-        await tx.execAsync(
-            'CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_single_default ON wallets(is_default) WHERE is_default = 1;',
-        );
+
+        // 6. Keep app on version 1 during development
         await tx.execAsync(`PRAGMA user_version = ${DATABASE_VERSION};`);
     });
 }
@@ -304,6 +348,14 @@ async function seedInitialData(db: SQLite.SQLiteDatabase): Promise<void> {
                 category.isBuiltIn ? 1 : 0,
                 category.isCustom ? 1 : 0,
             ],
+        );
+    }
+
+    // Keep built-in income categories updated with their specific icons if they had the generic 'payments' fallback
+    for (const category of defaultIncomeCategories) {
+        await db.runAsync(
+            `UPDATE categories SET icon_key = ? WHERE id = ? AND is_built_in = 1 AND icon_key = 'payments';`,
+            [category.iconKey, category.id],
         );
     }
 
@@ -348,84 +400,6 @@ async function normalizeDefaultWallet(db: SQLite.SQLiteDatabase): Promise<void> 
     await db.runAsync('UPDATE wallets SET is_default = 1 WHERE id = ?;', [selectedId]);
 }
 
-async function reconcileWalletBalances(db: SQLite.SQLiteDatabase): Promise<void> {
-    const rows = await db.getAllAsync<{ wallet_id: string; net: number | null }>(`
-    SELECT wallet_id,
-      SUM(CASE
-        WHEN status <> 'CLEARED' THEN 0
-        WHEN type = 'CREDIT' THEN amount
-        ELSE -amount
-      END) AS net
-    FROM transactions
-    GROUP BY wallet_id;
-  `);
-
-    for (const row of rows) {
-        const net = Number(row.net ?? 0);
-        if (Number.isFinite(net) && net !== 0) {
-            await db.runAsync('UPDATE wallets SET balance = balance + ? WHERE id = ?;', [net, row.wallet_id]);
-        }
-    }
-}
-
-async function migrateToVersion3(db: SQLite.SQLiteDatabase): Promise<void> {
-    // 1. Ensure new wallet columns exist (idempotent ALTER TABLE checks)
-    const tableInfo = await db.getAllAsync<{ name: string }>('PRAGMA table_info(wallets);');
-    const existingCols = new Set(tableInfo.map((col) => col.name.toLowerCase()));
-
-    if (!existingCols.has('provider_id')) {
-        await db.runAsync("ALTER TABLE wallets ADD COLUMN provider_id TEXT NOT NULL DEFAULT 'custom';");
-    }
-    if (!existingCols.has('opening_balance')) {
-        await db.runAsync('ALTER TABLE wallets ADD COLUMN opening_balance REAL NOT NULL DEFAULT 0.0;');
-    }
-    if (!existingCols.has('account_number_last4')) {
-        await db.runAsync('ALTER TABLE wallets ADD COLUMN account_number_last4 TEXT;');
-    }
-    if (!existingCols.has('is_archived')) {
-        await db.runAsync('ALTER TABLE wallets ADD COLUMN is_archived INTEGER NOT NULL DEFAULT 0;');
-    }
-
-    // 2. Identify all wallets and reconcile with the strict balance invariant:
-    //    balance = opening_balance + sum(cleared credits) - sum(cleared debits)
-    //    For the known legacy seeded wallet ('wallet-1'), the hardcoded ETB 12,450
-    //    starting balance was fabricated; set its legitimate opening_balance to 0.0
-    //    and recompute its balance solely from real user transactions.
-    const wallets = await db.getAllAsync<{ id: string; name: string; balance: number; opening_balance: number | null }>(
-        'SELECT id, name, balance, opening_balance FROM wallets;',
-    );
-
-    for (const w of wallets) {
-        const netRow = await db.getFirstAsync<{ net: number | null }>(`
-            SELECT SUM(CASE
-                WHEN status <> 'CLEARED' THEN 0
-                WHEN type = 'CREDIT' THEN amount
-                ELSE -amount
-            END) AS net
-            FROM transactions
-            WHERE wallet_id = ?;
-        `, [w.id]);
-        const netTransactions = Number(netRow?.net ?? 0);
-
-        let legitimateOpening = Number(w.opening_balance ?? 0);
-
-        if (w.id === 'wallet-1' || w.id === 'wallet-cash-default') {
-            legitimateOpening = 0.0;
-            await db.runAsync(
-                "UPDATE wallets SET provider_id = 'cash' WHERE id = ? AND (provider_id = 'custom' OR provider_id IS NULL);",
-                [w.id],
-            );
-        }
-
-        const reconciledBalance = legitimateOpening + netTransactions;
-
-        await db.runAsync(
-            'UPDATE wallets SET opening_balance = ?, balance = ? WHERE id = ?;',
-            [legitimateOpening, reconciledBalance, w.id],
-        );
-    }
-}
-
 function mapUser(row: UserRow): User {
     return {
         id: row.id,
@@ -464,6 +438,7 @@ function mapBudget(row: BudgetRow): Budget {
             row.alert_threshold == null
                 ? 0.8
                 : Number(row.alert_threshold),
+        walletId: row.wallet_id || null,
     };
 }
 
@@ -837,8 +812,8 @@ export async function insertBudgetDB(budget: Budget): Promise<void> {
     const db = await getDatabase();
     await assertBudgetCategory(db, budget);
     await db.runAsync(
-        `INSERT INTO budgets (id, category_id, limit_amount, start_date, end_date, recurring, alert_threshold)
-     VALUES (?, ?, ?, ?, ?, ?, ?);`,
+        `INSERT INTO budgets (id, category_id, limit_amount, start_date, end_date, recurring, alert_threshold, wallet_id)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
         [
             budget.id,
             budget.categoryId,
@@ -847,6 +822,7 @@ export async function insertBudgetDB(budget: Budget): Promise<void> {
             budget.endDate,
             budget.recurring || 'monthly',
             budget.alertThreshold ?? 0.8,
+            budget.walletId || null,
         ],
     );
 }
@@ -863,6 +839,7 @@ export async function updateBudgetDB(
     if (updated.endDate !== undefined) { fields.push('end_date = ?'); values.push(updated.endDate); }
     if (updated.recurring !== undefined) { fields.push('recurring = ?'); values.push(updated.recurring); }
     if (updated.alertThreshold !== undefined) { fields.push('alert_threshold = ?'); values.push(updated.alertThreshold); }
+    if (updated.walletId !== undefined) { fields.push('wallet_id = ?'); values.push(updated.walletId || null); }
     if (fields.length === 0) return;
 
     await withExclusiveTransaction(async (db) => {
@@ -1082,7 +1059,7 @@ export async function deleteWalletDB(id: string): Promise<void> {
 
 // JSON export. The export deliberately excludes the user's PIN hash.
 
-export async function exportDatabaseToJSON(): Promise<ExportDataPayload> {
+export async function exportDatabaseToJSON(settings?: UserPreferencesPayload): Promise<ExportDataPayload> {
     const userRow = await getActiveUserDB();
     const [wallets, categories, budgets, transactions] = await Promise.all([
         getWalletsDB(),
@@ -1120,5 +1097,204 @@ export async function exportDatabaseToJSON(): Promise<ExportDataPayload> {
             totalExpenses,
             currency: 'ETB',
         },
+        settings,
     };
+}
+
+export interface ImportSummary {
+    restoredWallets: number;
+    restoredCategories: number;
+    restoredBudgets: number;
+    restoredTransactions: number;
+    userProfile?: { name: string; email?: string } | null;
+    settings?: UserPreferencesPayload;
+}
+
+export async function importDatabaseFromJSON(payload: ExportDataPayload): Promise<ImportSummary> {
+    if (!payload || typeof payload !== 'object') {
+        throw new Error('Invalid backup file: Not a valid JSON document.');
+    }
+    if (!Array.isArray(payload.wallets) || !Array.isArray(payload.categories) || !Array.isArray(payload.transactions)) {
+        throw new Error('Invalid backup file: Missing core financial tables (wallets, categories, or transactions).');
+    }
+
+    return withExclusiveTransaction(async (db) => {
+        // 1. Delete transactions and budgets first to avoid foreign key / trigger blocks
+        await db.runAsync('DELETE FROM transactions;');
+        await db.runAsync('DELETE FROM budgets;');
+
+        // 2. Clear default flag on wallets, then delete all wallets
+        await db.runAsync('UPDATE wallets SET is_default = 0;');
+        await db.runAsync('DELETE FROM wallets;');
+
+        // 3. Clear existing custom categories (built-in categories remain protected)
+        await db.runAsync('DELETE FROM categories WHERE is_built_in = 0;');
+
+        // 4. Restore categories
+        let restoredCategoriesCount = 0;
+        const validCategoryIds = new Set<string>();
+
+        const existingCatRows = await db.getAllAsync<{ id: string }>('SELECT id FROM categories;');
+        existingCatRows.forEach((r) => validCategoryIds.add(r.id));
+
+        for (const cat of payload.categories) {
+            const flow = cat.flow === 'INCOME' ? 'INCOME' : 'EXPENSE';
+            const isBuiltIn = cat.isCustom ? 0 : 1;
+            const isCustom = cat.isCustom ? 1 : 0;
+            const essential = cat.essential ? 1 : 0;
+            const recurring = cat.recurring ? 1 : 0;
+
+            await db.runAsync(
+                `INSERT INTO categories (id, name, icon_key, color_key, flow, essential, recurring, is_built_in, is_custom)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 ON CONFLICT(id) DO UPDATE SET
+                   name = excluded.name,
+                   icon_key = excluded.icon_key,
+                   color_key = excluded.color_key,
+                   flow = excluded.flow;`,
+                [
+                    cat.id,
+                    cat.name.trim(),
+                    cat.iconKey || 'HelpCircle',
+                    cat.colorKey || null,
+                    flow,
+                    essential,
+                    recurring,
+                    isBuiltIn,
+                    isCustom,
+                ],
+            );
+            validCategoryIds.add(cat.id);
+            restoredCategoriesCount++;
+        }
+
+        // 5. Restore wallets
+        let restoredWalletsCount = 0;
+        const validWalletIds = new Set<string>();
+        let hasDefault = false;
+
+        for (const w of payload.wallets) {
+            const isDefault = Boolean(w.isDefault && !hasDefault);
+            if (isDefault) hasDefault = true;
+
+            await db.runAsync(
+                `INSERT INTO wallets (id, name, icon, provider_id, opening_balance, balance, currency, account_number_last4, is_default, is_archived, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+                [
+                    w.id,
+                    w.name.trim(),
+                    w.icon || 'Wallet',
+                    w.providerId || 'custom',
+                    Number(w.openingBalance) || 0,
+                    Number(w.balance) || 0,
+                    (w.currency || 'ETB').trim().toUpperCase(),
+                    w.accountNumberLast4?.trim() || null,
+                    isDefault ? 1 : 0,
+                    w.isArchived ? 1 : 0,
+                    w.createdAt || new Date().toISOString(),
+                ],
+            );
+            validWalletIds.add(w.id);
+            restoredWalletsCount++;
+        }
+
+        // Ensure at least one default wallet
+        if (!hasDefault && payload.wallets.length > 0) {
+            await db.runAsync('UPDATE wallets SET is_default = 1 WHERE id = ?;', [payload.wallets[0].id]);
+        }
+
+        // 6. Restore budgets
+        let restoredBudgetsCount = 0;
+        if (Array.isArray(payload.budgets)) {
+            for (const b of payload.budgets) {
+                if (!validCategoryIds.has(b.categoryId)) continue;
+                const walletId = b.walletId && validWalletIds.has(b.walletId) ? b.walletId : null;
+
+                await db.runAsync(
+                    `INSERT INTO budgets (id, category_id, limit_amount, start_date, end_date, recurring, alert_threshold, wallet_id)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?);`,
+                    [
+                        b.id,
+                        b.categoryId,
+                        Number(b.limitAmount) || 0,
+                        b.startDate,
+                        b.endDate,
+                        b.recurring || 'monthly',
+                        b.alertThreshold ?? 0.8,
+                        walletId,
+                    ],
+                );
+                restoredBudgetsCount++;
+            }
+        }
+
+        // 7. Restore transactions
+        let restoredTransactionsCount = 0;
+        for (const tx of payload.transactions) {
+            if (!validCategoryIds.has(tx.categoryId) || !validWalletIds.has(tx.walletId)) {
+                continue;
+            }
+
+            await db.runAsync(
+                `INSERT INTO transactions
+                 (id, amount, type, category_id, note, date, status, wallet_id, current_balance, source, raw_sms, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', NULL, ?);`,
+                [
+                    tx.id,
+                    Number(tx.amount),
+                    tx.type,
+                    tx.categoryId,
+                    tx.note || '',
+                    tx.date,
+                    tx.status || 'CLEARED',
+                    tx.walletId,
+                    tx.currentBalance ?? null,
+                    tx.createdAt || new Date().toISOString(),
+                ],
+            );
+            restoredTransactionsCount++;
+        }
+
+        // 8. Reconcile wallet balances with actual transaction net
+        for (const walletId of validWalletIds) {
+            const row = await db.getFirstAsync<{ opening_balance: number }>(
+                'SELECT opening_balance FROM wallets WHERE id = ?;',
+                [walletId],
+            );
+            const opening = Number(row?.opening_balance ?? 0);
+            const netRow = await db.getFirstAsync<{ net: number | null }>(`
+                SELECT SUM(CASE
+                    WHEN status <> 'CLEARED' THEN 0
+                    WHEN type = 'CREDIT' THEN amount
+                    ELSE -amount
+                END) AS net
+                FROM transactions
+                WHERE wallet_id = ?;
+            `, [walletId]);
+            const net = Number(netRow?.net ?? 0);
+            await db.runAsync(
+                'UPDATE wallets SET balance = ? WHERE id = ?;',
+                [opening + net, walletId],
+            );
+        }
+
+        // 9. Update user profile name and email (preserves device PIN completely)
+        if (payload.user?.name) {
+            const cleanName = payload.user.name.trim();
+            const cleanEmail = payload.user.email?.trim() || null;
+            await db.runAsync(
+                'UPDATE users SET name = ?, email = ? WHERE id = (SELECT id FROM users LIMIT 1);',
+                [cleanName, cleanEmail],
+            );
+        }
+
+        return {
+            restoredWallets: restoredWalletsCount,
+            restoredCategories: restoredCategoriesCount,
+            restoredBudgets: restoredBudgetsCount,
+            restoredTransactions: restoredTransactionsCount,
+            userProfile: payload.user ? { name: payload.user.name, email: payload.user.email } : null,
+            settings: payload.settings,
+        };
+    });
 }

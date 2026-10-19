@@ -13,6 +13,13 @@ export interface User {
     createdAt: string;
 }
 
+export interface UserPreferencesPayload {
+    theme?: 'dark' | 'light';
+    budgetAlertsEnabled?: boolean;
+    popupAlertsEnabled?: boolean;
+    alertThreshold?: number;
+}
+
 export interface ExportDataPayload {
     version: string;
     exportedAt: string;
@@ -30,4 +37,6 @@ export interface ExportDataPayload {
         totalExpenses: number;
         currency: string;
     };
+
+    settings?: UserPreferencesPayload;
 }
