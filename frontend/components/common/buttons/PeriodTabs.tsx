@@ -25,7 +25,7 @@
 // needs to know WHICH period is selected. This component owns
 // the animation, the parent owns the state.
 
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import {
     View,
     Text,

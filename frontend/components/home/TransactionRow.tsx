@@ -2,7 +2,7 @@
 // We make this a separate component because it gets reused many times.
 // In React, anything you repeat -> extract it into a component.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Pencil, Trash2 } from 'lucide-react-native';
 import { Transaction } from '../../types/Transaction';

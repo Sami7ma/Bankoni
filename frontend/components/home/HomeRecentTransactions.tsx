@@ -3,7 +3,7 @@
 // Self-contained "Recent Transactions" section for the HomeScreen.
 // Pulls its own data from the store, shows the last 7 transactions.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import useTheme from '../../hooks/useTheme';

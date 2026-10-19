@@ -1,5 +1,4 @@
 // components/common/buttons/LogoutButton.tsx
-import React from 'react';
 import { TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { Lock } from 'lucide-react-native';
 import useTheme from '../../../hooks/useTheme';

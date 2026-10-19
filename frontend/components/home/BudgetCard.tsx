@@ -11,7 +11,7 @@
 // - Percentage used
 // - Remaining amount
 // - Remove budget action
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Pencil, Trash2 } from 'lucide-react-native';
 import { Budget } from '../../types/Budget';

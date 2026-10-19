@@ -4,7 +4,7 @@
 // Cleanly differentiates Expense vs Income with dedicated icon catalogs,
 // curated color palettes, quick suggestions, and a live category badge preview.
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
     View,
     Text,

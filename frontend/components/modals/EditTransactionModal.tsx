@@ -1,5 +1,5 @@
 // components/modals/EditTransactionModal.tsx
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, KeyboardAvoidingView, Platform, Pressable, } from 'react-native';
 
 import { Transaction } from '../../types/Transaction';

@@ -10,7 +10,7 @@
 // Extracting it saves ~120 lines total and ensures both modals
 // have the exact same selection experience.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { ChevronDown, Check, Plus } from 'lucide-react-native';
 import useTheme from '../../../hooks/useTheme';

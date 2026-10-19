@@ -3,7 +3,7 @@
 // masked identifier, and default status.
 // Aligned with the BanKoni floating glass card design system (AddBudgetModal / AddTransactionModal).
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,

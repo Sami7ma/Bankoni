@@ -10,7 +10,6 @@
 //
 // COULD BE REUSED on a future Profile or Dashboard screen.
 
-import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { TrendingUp, TrendingDown } from 'lucide-react-native';
 import useTheme from '../../../hooks/useTheme';

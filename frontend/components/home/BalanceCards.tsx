@@ -6,7 +6,7 @@
 // - No swiping — one card only
 // - 4 stat pills instead of dots: Balance (gold) | Income (green) | Expenses (red) | % ratio
 
-import React, { forwardRef, useImperativeHandle } from 'react';
+import { forwardRef, useImperativeHandle } from 'react';
 import { View, Text, StyleSheet, Platform, Dimensions } from 'react-native';
 import { Nfc } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';

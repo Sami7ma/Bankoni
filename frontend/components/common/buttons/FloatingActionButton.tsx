@@ -12,7 +12,7 @@
 // Having it as a component means consistent sizing, color,
 // and behavior everywhere.
 
-import React, { ReactNode } from 'react';
+import { ReactNode } from 'react';
 import {
     TouchableOpacity,
     StyleSheet,

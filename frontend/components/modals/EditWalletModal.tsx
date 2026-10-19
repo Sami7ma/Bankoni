@@ -3,7 +3,7 @@
 // Modifying opening balance updates wallet balance correctly based on historical transactions.
 // Aligned with the BanKoni floating glass card design system (EditTransactionModal / EditBudgetModal).
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
     Alert,
     KeyboardAvoidingView,

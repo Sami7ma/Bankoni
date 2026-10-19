@@ -16,7 +16,6 @@
 // - color?: optional background color (defaults to champagne/gold)
 // - style?: optional extra styles (e.g. marginTop, width)
 
-import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle } from 'react-native';
 import useTheme from "../../../hooks/useTheme";
 

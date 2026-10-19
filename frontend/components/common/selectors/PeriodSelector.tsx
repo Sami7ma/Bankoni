@@ -19,7 +19,7 @@
 // Extracting it keeps the modal focused on its job
 // (collecting budget data) instead of managing date logic.
 
-import React, { useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, FlatList, } from 'react-native';
 import { Calendar as CalendarIcon } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';

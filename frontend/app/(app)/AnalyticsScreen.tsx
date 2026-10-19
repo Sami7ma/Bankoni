@@ -16,7 +16,7 @@
 // 4. useMemo groups expenses by category for the top spending list
 // 5. Computed data is passed as props to child components
 
-import React, { useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { View, Text, StyleSheet, ScrollView } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";

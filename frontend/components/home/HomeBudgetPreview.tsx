@@ -2,7 +2,7 @@
 // Compact budget preview for the HomeScreen.
 // Shows up to 4 budgets as individual cards matching TransactionRow style.
 // components/home/HomeBudgetPreview.tsx
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Pencil, Trash2 } from 'lucide-react-native';

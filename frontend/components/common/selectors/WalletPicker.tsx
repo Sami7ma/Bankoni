@@ -5,7 +5,7 @@
 // - AddTransactionModal & EditTransactionModal (select source/destination wallet)
 // - AddBudgetModal & EditBudgetModal (scope budget to specific wallet or all wallets)
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { ChevronDown, Check, WalletCards } from 'lucide-react-native';
 import useTheme from '../../../hooks/useTheme';

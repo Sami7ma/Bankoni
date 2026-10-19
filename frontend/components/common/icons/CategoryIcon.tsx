@@ -4,7 +4,6 @@
 // Supports both built-in legacy keys (e.g. 'local_gas_station', 'payments')
 // and modern Lucide icon keys (e.g. 'fuel', 'banknote', 'utensils').
 
-import React from 'react';
 import {
     // Expense icons
     Utensils,

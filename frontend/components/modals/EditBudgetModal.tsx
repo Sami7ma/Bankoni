@@ -1,5 +1,5 @@
 // components/modals/EditBudgetModal.tsx
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Modal, ScrollView, KeyboardAvoidingView, Platform, Pressable, } from 'react-native';
 
 import useTheme from '../../hooks/useTheme';

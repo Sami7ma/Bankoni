@@ -2,7 +2,7 @@
 // Account, security, preferences, and backup controls for the local BanKoni vault.
 // Follows the same screen structure as AnalyticsScreen and TransactionScreen.
 
-import React, { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import {
     Alert,
     LayoutAnimation,
@@ -65,7 +65,6 @@ export default function SettingsScreen() {
         (state) => state.isBiometricSupported,
     );
     const theme = useBanKoniStore((state) => state.theme);
-    const setTheme = useBanKoniStore((state) => state.setTheme);
     const toggleTheme = useBanKoniStore((state) => state.toggleTheme);
     const exportDataToJSONFile = useBanKoniStore(
         (state) => state.exportDataToJSONFile,

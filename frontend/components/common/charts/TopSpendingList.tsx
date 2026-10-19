@@ -10,7 +10,6 @@
 //
 // COULD BE REUSED on a budget breakdown screen or monthly report.
 
-import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import useTheme from '../../../hooks/useTheme';
 

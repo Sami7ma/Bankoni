@@ -12,7 +12,6 @@
 // If we ever want to change the size or add a haptic feedback,
 // we do it once here.
 
-import React from 'react';
 import {
     TouchableOpacity,
     StyleSheet,

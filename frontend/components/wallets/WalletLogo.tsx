@@ -1,4 +1,3 @@
-import React from 'react';
 import { StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 import { SvgXml } from 'react-native-svg';
 import { Banknote, Building2, Smartphone, WalletCards } from 'lucide-react-native';

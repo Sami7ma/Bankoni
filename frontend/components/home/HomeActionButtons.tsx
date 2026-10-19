@@ -3,7 +3,7 @@
 // "Add Expense" and "Add Income" action buttons for the HomeScreen.
 // Self-contained — manages its own press state.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Plus } from 'lucide-react-native';
 import useTheme from '../../hooks/useTheme';

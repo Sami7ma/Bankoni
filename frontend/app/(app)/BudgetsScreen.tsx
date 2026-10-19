@@ -1,9 +1,9 @@
-import React, { useState, useMemo } from "react";
+import { useState } from "react";
 
-import { Text, View, StyleSheet, FlatList, TouchableOpacity, Alert, } from "react-native";
+import { Text, View, StyleSheet, FlatList, Alert, } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
-import { Plus, NotebookPen } from "lucide-react-native";
+import { NotebookPen } from "lucide-react-native";
 
 import useTheme from "../../hooks/useTheme";
 import useBanKoniStore from "../../store/useBanKoniStore";

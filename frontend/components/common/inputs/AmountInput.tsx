@@ -19,7 +19,6 @@
 // we guarantee the same keyboard type, placeholder,
 // and styling logic in both places.
 
-import React from 'react';
 import { View, Text, TextInput, StyleSheet, Dimensions } from 'react-native';
 import useTheme from '../../../hooks/useTheme';
 

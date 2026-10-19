@@ -12,7 +12,7 @@
 // Styles that were moved INTO those components
 // have been REMOVED from this file's stylesheet.
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 import {
     View,
@@ -26,7 +26,6 @@ import {
     Pressable,
 } from 'react-native';
 
-import { Transaction } from '../../types/Transaction';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import useTheme from '../../hooks/useTheme';
 

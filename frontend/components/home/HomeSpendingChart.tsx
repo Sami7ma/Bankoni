@@ -3,7 +3,7 @@
 // Compact monthly spending chart for HomeScreen.
 // Reuses SpendingLineChart but computes "this month" data only.
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import useTheme from '../../hooks/useTheme';

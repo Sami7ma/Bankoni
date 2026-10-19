@@ -12,7 +12,7 @@
 // All date/period logic has been moved into PeriodSelector.
 // All duplicate styles have been removed from this file.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
     View,
     Text,

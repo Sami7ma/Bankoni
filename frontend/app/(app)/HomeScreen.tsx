@@ -1,6 +1,5 @@
 // app/(app)/HomeScreen.tsx
 // The main dashboard — the first screen users see after logging in.
-import React from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';

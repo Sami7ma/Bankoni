@@ -1,12 +1,12 @@
 // full list of all trnascsin wiht serach and filering
 // this is the 'Trasncion tab in the bootm in th enavigain 
 
-import React, { useState, useMemo, act } from 'react';
+import { useState, useMemo } from 'react';
 // use memo caches an expensiv calculain it only recalcualte when its dependics change we'll 
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { CalendarDays, CreditCard, Filter, Plus, Search, X } from 'lucide-react-native';
+import { CalendarDays, CreditCard, Plus, Search, X } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
@@ -48,7 +48,7 @@ export default function TransactionScreen() {
     const [searchQuery, setSearchQuery] = useState('');
     const [filter, setFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
     const [modalVisible, setModalVisible] = useState(false);
-    const [modalType, setModalType] = useState<'CREDIT' | 'DEBIT'>('DEBIT');
+    const [modalType] = useState<'CREDIT' | 'DEBIT'>('DEBIT');
     // calnder visibility 
     const [calendarVisible, setCalendarVisible] = useState(false);
     // show transarin form every dates

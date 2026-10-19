@@ -3,7 +3,7 @@
 // Supports viewing wallets, provider logos, legitimate opening balances,
 // creating/editing wallets, setting default, archiving, and transaction history.
 
-import React, { useState, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import {
     Alert,
     FlatList,
@@ -20,8 +20,6 @@ import {
     ArrowDownLeft,
     ArrowUpRight,
     ChevronRight,
-    CreditCard,
-    Plus,
     Settings2,
     Star,
     Trash2,
@@ -72,11 +70,6 @@ export default function WalletsScreen() {
     );
 
     const displayedWallets = showArchived ? archivedWallets : activeWallets;
-
-    const selectedWallet = useMemo(
-        () => wallets.find((w) => w.id === selectedWalletId) ?? null,
-        [wallets, selectedWalletId],
-    );
 
     const walletTransactions = useMemo(() => {
         if (!selectedWalletId) return [];
