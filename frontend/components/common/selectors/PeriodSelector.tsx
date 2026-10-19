@@ -24,11 +24,11 @@ import { View, Text, TouchableOpacity, StyleSheet, FlatList, } from 'react-nativ
 import { Calendar as CalendarIcon } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import useTheme from '../../../hooks/useTheme';
+import { BudgetPeriod } from '../../../types/Budget';
 
 //  TYPES
 // These define what kind of period the user can pick
 type FixedPeriod = 'daily' | 'weekly' | 'biweekly' | 'monthly';
-type BudgetPeriod = FixedPeriod | 'custom';
 
 //PRESET OPTIONS for the scroll wheel
 const PERIOD_OPTIONS: { value: FixedPeriod; label: string }[] = [

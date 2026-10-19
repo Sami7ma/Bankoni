@@ -1,12 +1,13 @@
 // components/modals/EditBudgetModal.tsx
 import { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Modal, ScrollView, KeyboardAvoidingView, Platform, Pressable, } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
-import { Budget } from '../../types/Budget';
+import { Budget, BudgetPeriod } from '../../types/Budget';
 
-import CloseButton from '../common/buttons/CloseButton';
+import ModalShell from '../common/overlays/ModalShell';
+import ModalHeader from '../common/overlays/ModalHeader';
 import AmountInput from '../common/inputs/AmountInput';
 import CategoryPicker from '../common/selectors/CategoryPicker';
 import WalletPicker from '../common/selectors/WalletPicker';
@@ -18,8 +19,6 @@ interface EditBudgetModalProps {
     budget: Budget | null;
     onClose: () => void;
 }
-
-type BudgetPeriod = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
 
 export default function EditBudgetModal({
     visible,
@@ -93,160 +92,66 @@ export default function EditBudgetModal({
     if (!budget) return null;
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-            statusBarTranslucent
-        >
-            <View style={styles.modalRoot}>
-                {/* Backdrop */}
-                <Pressable style={styles.backdrop} onPress={onClose} />
+        <ModalShell visible={visible} onRequestClose={onClose}>
+            <ModalHeader eyebrow="EDIT BUDGET" title="Update Spending Limit" onClose={onClose} />
 
-                {/* Centered Floating Card */}
-                <KeyboardAvoidingView
-                    style={styles.keyboardLayer}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                >
-                    <View style={styles.container}>
-                        {/* Subtle inner glass highlight */}
-                        <View pointerEvents="none" style={styles.glassHighlight} />
+            {/* FORM */}
+            <ScrollView
+                contentContainerStyle={styles.form}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                {/* CATEGORY */}
+                <CategoryPicker
+                    categories={availableCategories}
+                    selectedId={selectedCategoryId}
+                    onSelect={setSelectedCategoryId}
+                    placeholder="Choose a category"
+                    flow="EXPENSE"
+                />
 
-                        {/* HEADER */}
-                        <View style={styles.header}>
-                            <View>
-                                <Text style={styles.headerEyebrow}>EDIT BUDGET</Text>
-                                <Text style={styles.headerTitle}>Update Spending Limit</Text>
-                            </View>
-                            <CloseButton onPress={onClose} />
-                        </View>
+                {/* WALLET SELECTION (OPTIONAL / ALL WALLETS) */}
+                <WalletPicker
+                    wallets={wallets}
+                    selectedId={selectedWalletId}
+                    onSelect={setSelectedWalletId}
+                    allowAll={true}
+                    allLabel="All Wallets"
+                    label="Apply to Wallet"
+                />
 
-                        {/* FORM */}
-                        <ScrollView
-                            contentContainerStyle={styles.form}
-                            keyboardShouldPersistTaps="handled"
-                            showsVerticalScrollIndicator={false}
-                        >
-                            {/* CATEGORY */}
-                            <CategoryPicker
-                                categories={availableCategories}
-                                selectedId={selectedCategoryId}
-                                onSelect={setSelectedCategoryId}
-                                placeholder="Choose a category"
-                                flow="EXPENSE"
-                            />
+                {/* AMOUNT */}
+                <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Budget Limit</Text>
+                    <AmountInput
+                        value={limitAmount}
+                        onChangeText={setLimitAmount}
+                        variant="compact"
+                    />
+                </View>
 
-                            {/* WALLET SELECTION (OPTIONAL / ALL WALLETS) */}
-                            <WalletPicker
-                                wallets={wallets}
-                                selectedId={selectedWalletId}
-                                onSelect={setSelectedWalletId}
-                                allowAll={true}
-                                allLabel="All Wallets"
-                                label="Apply to Wallet"
-                            />
+                {/* PERIOD + DATE RANGE */}
+                <PeriodSelector
+                    startDate={startDate}
+                    endDate={endDate}
+                    period={period}
+                    onStartDateChange={setStartDate}
+                    onEndDateChange={setEndDate}
+                    onPeriodChange={setPeriod}
+                />
 
-                            {/* AMOUNT */}
-                            <View style={styles.fieldGroup}>
-                                <Text style={styles.label}>Budget Limit</Text>
-                                <AmountInput
-                                    value={limitAmount}
-                                    onChangeText={setLimitAmount}
-                                    variant="compact"
-                                />
-                            </View>
-
-                            {/* PERIOD + DATE RANGE */}
-                            <PeriodSelector
-                                startDate={startDate}
-                                endDate={endDate}
-                                period={period}
-                                onStartDateChange={setStartDate}
-                                onEndDateChange={setEndDate}
-                                onPeriodChange={setPeriod}
-                            />
-
-                            {/* SUBMIT */}
-                            <PrimaryButton
-                                label="Save Changes"
-                                onPress={handleSubmit}
-                            />
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </View>
-        </Modal>
+                {/* SUBMIT */}
+                <PrimaryButton
+                    label="Save Changes"
+                    onPress={handleSubmit}
+                />
+            </ScrollView>
+        </ModalShell>
     );
 }
 
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
     StyleSheet.create({
-        modalRoot: {
-            flex: 1,
-        },
-        backdrop: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: colors.overlay,
-        },
-        keyboardLayer: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 14,
-            paddingVertical: 24,
-        },
-        container: {
-            width: '100%',
-            maxWidth: 500,
-            maxHeight: '88%',
-            backgroundColor: colors.surface + 'F2',
-            borderColor: colors.champagne + '55',
-            borderRadius: 30,
-            borderWidth: 1,
-            overflow: 'hidden',
-            shadowOffset: { width: 0, height: 15 },
-            shadowOpacity: 0.35,
-            shadowRadius: 35,
-            elevation: 25,
-        },
-        glassHighlight: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            borderRadius: 30,
-            borderWidth: 1,
-            pointerEvents: 'none',
-            borderColor: colors.champagne + '18',
-        },
-        header: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingHorizontal: 22,
-            paddingTop: 18,
-            paddingBottom: 14,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-        },
-        headerEyebrow: {
-            fontSize: 10,
-            fontWeight: '700',
-            letterSpacing: 1.5,
-            color: colors.champagne,
-            marginBottom: 4,
-        },
-        headerTitle: {
-            fontSize: 20,
-            fontWeight: '700',
-            color: colors.textPrimary,
-        },
         form: {
             padding: 18,
             gap: 18,

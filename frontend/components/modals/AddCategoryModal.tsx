@@ -11,11 +11,7 @@ import {
     TextInput,
     TouchableOpacity,
     StyleSheet,
-    Modal,
     ScrollView,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
 } from 'react-native';
 import {
     // Expense icons
@@ -67,7 +63,8 @@ import {
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import type { Category, CategoryFlow } from '../../types/Category';
-import CloseButton from '../common/buttons/CloseButton';
+import ModalShell from '../common/overlays/ModalShell';
+import ModalHeader from '../common/overlays/ModalHeader';
 import PrimaryButton from '../common/buttons/PrimaryButton';
 
 interface AddCategoryModalProps {
@@ -279,41 +276,26 @@ export default function AddCategoryModal({
     const ActiveIconComponent = activeIconItem.Icon;
 
     return (
-        <Modal
+        <ModalShell
             visible={visible}
-            transparent
-            animationType="fade"
             onRequestClose={onClose}
-            statusBarTranslucent
+            cardStyle={styles.card}
         >
-            <View style={styles.modalRoot}>
-                <Pressable style={styles.backdrop} onPress={onClose} />
+            <ModalHeader
+                eyebrow="ORGANIZATION & BUDGETING"
+                title={flow === 'EXPENSE' ? 'New Expense Category' : 'New Income Category'}
+                onClose={onClose}
+                noBorder
+                headerStyle={styles.header}
+            />
 
-                <KeyboardAvoidingView
-                    style={styles.keyboardLayer}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                >
-                    <View style={styles.container}>
-                        <View pointerEvents="none" style={styles.glassHighlight} />
-
-                        {/* HEADER */}
-                        <View style={styles.header}>
-                            <View>
-                                <Text style={styles.headerEyebrow}>ORGANIZATION & BUDGETING</Text>
-                                <Text style={styles.headerTitle}>
-                                    {flow === 'EXPENSE' ? 'New Expense Category' : 'New Income Category'}
-                                </Text>
-                            </View>
-                            <CloseButton onPress={onClose} />
-                        </View>
-
-                        {/* FORM */}
-                        <ScrollView
-                            style={styles.scroll}
-                            contentContainerStyle={styles.form}
-                            showsVerticalScrollIndicator={false}
-                            keyboardShouldPersistTaps="handled"
-                        >
+            {/* FORM */}
+            <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.form}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
                             {/* FLOW TOGGLE (EXPENSE vs INCOME) */}
                             <View style={styles.toggleContainer}>
                                 <TouchableOpacity
@@ -560,76 +542,27 @@ export default function AddCategoryModal({
                                 disabled={isSaving}
                                 color={flow === 'EXPENSE' ? colors.danger : colors.success}
                             />
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </View>
-        </Modal>
+            </ScrollView>
+        </ModalShell>
     );
 }
 
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
     StyleSheet.create({
-        modalRoot: {
-            flex: 1,
-        },
-        backdrop: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: colors.overlay,
-        },
-        keyboardLayer: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 14,
-            paddingVertical: 24,
-        },
-        container: {
-            width: '100%',
+        card: {
             maxWidth: 520,
             maxHeight: '92%',
             backgroundColor: colors.surface + 'FA',
-            borderColor: colors.champagne + '55',
-            borderRadius: 30,
-            borderWidth: 1,
-            overflow: 'hidden',
             shadowColor: '#000',
             shadowOffset: { width: 0, height: 16 },
             shadowOpacity: 0.4,
             shadowRadius: 28,
             elevation: 20,
         },
-        glassHighlight: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            height: 1,
-            backgroundColor: 'rgba(255, 255, 255, 0.25)',
-        },
         header: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
             alignItems: 'flex-start',
-            paddingHorizontal: 22,
             paddingTop: 22,
             paddingBottom: 12,
-        },
-        headerEyebrow: {
-            fontSize: 10,
-            fontWeight: '700',
-            letterSpacing: 2,
-            color: colors.champagne,
-            marginBottom: 4,
-        },
-        headerTitle: {
-            fontSize: 22,
-            fontWeight: '700',
-            color: colors.textPrimary,
         },
         scroll: {
             flexGrow: 0,

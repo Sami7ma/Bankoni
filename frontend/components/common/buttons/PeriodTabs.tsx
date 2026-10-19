@@ -42,7 +42,7 @@ import useTheme from '../../../hooks/useTheme';
 const TAB_WIDTH = (Dimensions.get('window').width - 28) / 3;
 
 // The three period options
-type Period = 'Week' | 'Month' | 'Year';
+export type Period = 'Week' | 'Month' | 'Year';
 const PERIODS: Period[] = ['Week', 'Month', 'Year'];
 
 // ── PROPS ────────────────────────────────────────────────

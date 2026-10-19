@@ -3,7 +3,7 @@
 // Eyebrow + title on the left, close button on the right, with a bottom
 // divider. Used inside <ModalShell>. Presentation only.
 
-import { StyleSheet, Text, View } from 'react-native';
+import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import useTheme from '../../../hooks/useTheme';
 import CloseButton from '../buttons/CloseButton';
@@ -12,14 +12,22 @@ interface ModalHeaderProps {
     eyebrow: string;
     title: string;
     onClose: () => void;
+    noBorder?: boolean;
+    headerStyle?: StyleProp<ViewStyle>;
 }
 
-export default function ModalHeader({ eyebrow, title, onClose }: ModalHeaderProps) {
+export default function ModalHeader({
+    eyebrow,
+    title,
+    onClose,
+    noBorder = false,
+    headerStyle,
+}: ModalHeaderProps) {
     const colors = useTheme();
     const styles = createStyles(colors);
 
     return (
-        <View style={styles.header}>
+        <View style={[styles.header, noBorder && styles.noBorder, headerStyle]}>
             <View>
                 <Text style={styles.headerEyebrow}>{eyebrow}</Text>
                 <Text style={styles.headerTitle}>{title}</Text>
@@ -40,6 +48,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             paddingBottom: 18,
             borderBottomWidth: 1,
             borderBottomColor: colors.border,
+        },
+        noBorder: {
+            borderBottomWidth: 0,
         },
         headerEyebrow: {
             fontSize: 10,

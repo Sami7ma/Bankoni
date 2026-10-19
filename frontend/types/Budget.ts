@@ -2,6 +2,8 @@
 // Example: "Don't spend more than ETB 500 on Groceries this month"
 // "Don't spend more than ETB 500 on Breakfast from Aug 21 to Aug 27."
 
+export type BudgetPeriod = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
+
 export interface Budget {
     id: string;
     categoryId: string;           // Which category is this budget for? Links to Category.id

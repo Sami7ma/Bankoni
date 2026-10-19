@@ -13,7 +13,16 @@
 // <ModalHeader onClose>.
 
 import type { ReactNode } from 'react';
-import { KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
+import {
+    KeyboardAvoidingView,
+    Modal,
+    Platform,
+    Pressable,
+    StyleProp,
+    StyleSheet,
+    View,
+    ViewStyle,
+} from 'react-native';
 
 import useTheme from '../../../hooks/useTheme';
 import { alpha, radii } from '../../../constants/designTokens';
@@ -22,9 +31,10 @@ interface ModalShellProps {
     visible: boolean;
     onRequestClose: () => void;
     children: ReactNode;
+    cardStyle?: StyleProp<ViewStyle>;
 }
 
-export default function ModalShell({ visible, onRequestClose, children }: ModalShellProps) {
+export default function ModalShell({ visible, onRequestClose, children, cardStyle }: ModalShellProps) {
     const colors = useTheme();
     const styles = createStyles(colors);
 
@@ -43,7 +53,7 @@ export default function ModalShell({ visible, onRequestClose, children }: ModalS
                     style={styles.keyboardLayer}
                     behavior={Platform.OS === 'ios' ? 'padding' : undefined}
                 >
-                    <View style={styles.container}>
+                    <View style={[styles.container, cardStyle]}>
                         <View pointerEvents="none" style={styles.glassHighlight} />
                         {children}
                     </View>

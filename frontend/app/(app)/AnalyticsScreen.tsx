@@ -28,12 +28,9 @@ import useBanKoniStore from "../../store/useBanKoniStore";
 // Each one handles its own UI + styles.
 // This screen just passes data to them.
 import SummaryCards from "../../components/common/charts/SummaryCards";
-import PeriodTabs from "../../components/common/buttons/PeriodTabs";
+import PeriodTabs, { Period } from "../../components/common/buttons/PeriodTabs";
 import SpendingLineChart from "../../components/common/charts/SpendingLineChart";
 import TopSpendingList, { SpendingCategory } from "../../components/common/charts/TopSpendingList";
-
-// ── TYPES ────────────────────────────────────────────────
-type Period = 'Week' | 'Month' | 'Year';
 
 // ── CONSTANTS ────────────────────────────────────────────
 // Colors for the top spending list dots

@@ -17,18 +17,16 @@ import {
     View,
     Text,
     StyleSheet,
-    Modal,
     ScrollView,
-    KeyboardAvoidingView,
-    Platform,
-    Pressable,
 } from 'react-native';
 
 // hooks
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
+import { BudgetPeriod } from '../../types/Budget';
 
-import CloseButton from '../common/buttons/CloseButton';
+import ModalShell from '../common/overlays/ModalShell';
+import ModalHeader from '../common/overlays/ModalHeader';
 import AmountInput from '../common/inputs/AmountInput';
 import CategoryPicker from '../common/selectors/CategoryPicker';
 import WalletPicker from '../common/selectors/WalletPicker';
@@ -40,8 +38,6 @@ interface AddBudgetModalProps {
     visible: boolean;
     onClose: () => void;
 }
-
-type BudgetPeriod = 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom';
 
 export default function AddBudgetModal({
     visible,
@@ -126,174 +122,74 @@ export default function AddBudgetModal({
 
     };
 
+    const handleClose = () => {
+        resetForm();
+        onClose();
+    };
+
     // UI
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={() => { resetForm(); onClose(); }}
-            statusBarTranslucent
-        >
-            <View style={styles.modalRoot}>
-                <Pressable
-                    style={styles.backdrop}
-                    onPress={() => { resetForm(); onClose(); }}
+        <ModalShell visible={visible} onRequestClose={handleClose}>
+            <ModalHeader eyebrow="NEW BUDGET" title="Set Spending Limit" onClose={handleClose} />
+
+            {/* FORM */}
+            <ScrollView
+                contentContainerStyle={styles.form}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+            >
+                {/* CATEGORY — was ~60 lines of inline JSX */}
+                <CategoryPicker
+                    categories={availableCategories}
+                    selectedId={selectedCategoryId}
+                    onSelect={setSelectedCategoryId}
+                    placeholder="Choose a category"
+                    flow="EXPENSE"
                 />
-                <KeyboardAvoidingView
-                    style={styles.keyboardLayer}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                >
-                    <View style={styles.container}>
-                        {/* HEADER */}
-                        <View style={styles.header}>
-                            <View>
-                                <Text style={styles.headerEyebrow}>
-                                    NEW BUDGET
-                                </Text>
-                                <Text style={styles.headerTitle}>
-                                    Set Spending Limit
-                                </Text>
-                            </View>
-                            {/* ← Was inline TouchableOpacity + X icon */}
-                            <CloseButton onPress={() => { resetForm(); onClose(); }} />
-                        </View>
 
-                        {/* FORM */}
-                        <ScrollView
-                            contentContainerStyle={styles.form}
-                            keyboardShouldPersistTaps="handled"
-                            showsVerticalScrollIndicator={false}
-                        >
-                            {/* CATEGORY — was ~60 lines of inline JSX */}
-                            <CategoryPicker
-                                categories={availableCategories}
-                                selectedId={selectedCategoryId}
-                                onSelect={setSelectedCategoryId}
-                                placeholder="Choose a category"
-                                flow="EXPENSE"
-                            />
+                {/* WALLET SELECTION (OPTIONAL / ALL WALLETS) */}
+                <WalletPicker
+                    wallets={wallets}
+                    selectedId={selectedWalletId}
+                    onSelect={setSelectedWalletId}
+                    allowAll={true}
+                    allLabel="All Wallets"
+                    label="Apply to Wallet"
+                />
 
-                            {/* WALLET SELECTION (OPTIONAL / ALL WALLETS) */}
-                            <WalletPicker
-                                wallets={wallets}
-                                selectedId={selectedWalletId}
-                                onSelect={setSelectedWalletId}
-                                allowAll={true}
-                                allLabel="All Wallets"
-                                label="Apply to Wallet"
-                            />
+                {/* AMOUNT — was ~15 lines of inline JSX */}
+                <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Budget Limit</Text>
+                    <AmountInput
+                        value={limitAmount}
+                        onChangeText={setLimitAmount}
+                        variant="compact"
+                    />
+                </View>
 
-                            {/* AMOUNT — was ~15 lines of inline JSX */}
-                            <View style={styles.fieldGroup}>
-                                <Text style={styles.label}>Budget Limit</Text>
-                                <AmountInput
-                                    value={limitAmount}
-                                    onChangeText={setLimitAmount}
-                                    variant="compact"
-                                />
-                            </View>
+                {/* PERIOD + DATE RANGE — was ~300 lines! 
+                    Now all handled by PeriodSelector */}
+                <PeriodSelector
+                    startDate={startDate}
+                    endDate={endDate}
+                    period={period}
+                    onStartDateChange={setStartDate}
+                    onEndDateChange={setEndDate}
+                    onPeriodChange={setPeriod}
+                />
 
-                            {/* PERIOD + DATE RANGE — was ~300 lines! 
-                                Now all handled by PeriodSelector */}
-                            <PeriodSelector
-                                startDate={startDate}
-                                endDate={endDate}
-                                period={period}
-                                onStartDateChange={setStartDate}
-                                onEndDateChange={setEndDate}
-                                onPeriodChange={setPeriod}
-                            />
-
-                            {/* SUBMIT — was ~8 lines of inline JSX */}
-                            <PrimaryButton
-                                label="Create Budget"
-                                onPress={handleSubmit}
-                            />
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </View>
-        </Modal>
+                {/* SUBMIT — was ~8 lines of inline JSX */}
+                <PrimaryButton
+                    label="Create Budget"
+                    onPress={handleSubmit}
+                />
+            </ScrollView>
+        </ModalShell>
     );
 }
 
-// ══════════════════════════════════════════════════════════
-// STYLES — CLEANED UP
-// ══════════════════════════════════════════════════════════
-// REMOVED styles that now live in components:
-// - closeButton → CloseButton
-// - amountRow, currency, amountInput → AmountInput
-// - selectorButton, selectorText, categoryList, categoryItem,
-//   categoryItemText, noCategoriesText → CategoryPicker
-// - periodSelectorRow, periodWheelContainer, periodWheelItem,
-//   periodWheelText, periodWheelTextActive, periodWheelSelection,
-//   customPeriodButton, customPeriodButtonActive, customPeriodText,
-//   customPeriodTextActive, dateSummary, dateButton, dateInfo,
-//   dateTitle, dateRange, rangeSelector, rangeField, rangeLabel,
-//   rangeDate, rangeDateActive, rangeDivider, rangeArrow,
-//   activeIndicator, calendarContainer → PeriodSelector
-// - submitButton, submitText → PrimaryButton
-
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
     StyleSheet.create({
-        // MODAL LAYOUT
-        modalRoot: {
-            flex: 1,
-        },
-        backdrop: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: colors.overlay,
-        },
-        keyboardLayer: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 14,
-        },
-        container: {
-            width: '100%',
-            maxWidth: 500,
-            maxHeight: '88%',
-            backgroundColor: colors.surface,
-            borderColor: colors.champagne + '55',
-            borderRadius: 30,
-            borderWidth: 1,
-            overflow: 'hidden',
-            shadowOffset: { width: 0, height: 15 },
-            shadowOpacity: 0.35,
-            shadowRadius: 35,
-            elevation: 25,
-        },
-
-        // HEADER
-        header: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingHorizontal: 22,
-            paddingTop: 15,
-            paddingBottom: 10,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-        },
-        headerEyebrow: {
-            fontSize: 10,
-            fontWeight: '700',
-            letterSpacing: 1.5,
-            color: colors.champagne,
-            marginBottom: 4,
-        },
-        headerTitle: {
-            fontSize: 20,
-            fontWeight: '700',
-            color: colors.textPrimary,
-        },
-
         // FORM
         form: {
             padding: 15,
