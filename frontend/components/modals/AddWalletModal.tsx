@@ -6,10 +6,6 @@
 import { useState } from 'react';
 import {
     Alert,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
     ScrollView,
     StyleSheet,
     Switch,
@@ -22,7 +18,8 @@ import { Check } from 'lucide-react-native';
 
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
-import CloseButton from '../common/buttons/CloseButton';
+import ModalShell from '../common/overlays/ModalShell';
+import ModalHeader from '../common/overlays/ModalHeader';
 import AmountInput from '../common/inputs/AmountInput';
 import PrimaryButton from '../common/buttons/PrimaryButton';
 import WalletLogo from '../wallets/WalletLogo';
@@ -102,201 +99,106 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
     };
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={handleClose}
-            statusBarTranslucent
-        >
-            <View style={styles.modalRoot}>
-                {/* Backdrop */}
-                <Pressable style={styles.backdrop} onPress={handleClose} />
+        <ModalShell visible={visible} onRequestClose={handleClose}>
+            <ModalHeader eyebrow="NEW ACCOUNT" title="Add New Wallet" onClose={handleClose} />
 
-                {/* Centered Floating Card */}
-                <KeyboardAvoidingView
-                    style={styles.keyboardLayer}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            {/* FORM */}
+            <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.form}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                {/* Provider Picker */}
+                <Text style={styles.inputLabel}>Select Financial Provider</Text>
+                <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.providerPickerContainer}
                 >
-                    <View style={styles.container}>
-                        {/* Subtle inner glass highlight */}
-                        <View pointerEvents="none" style={styles.glassHighlight} />
-
-                        {/* HEADER */}
-                        <View style={styles.header}>
-                            <View>
-                                <Text style={styles.headerEyebrow}>NEW ACCOUNT</Text>
-                                <Text style={styles.headerTitle}>Add New Wallet</Text>
-                            </View>
-                            <CloseButton onPress={handleClose} />
-                        </View>
-
-                        {/* FORM */}
-                        <ScrollView
-                            style={styles.scroll}
-                            contentContainerStyle={styles.form}
-                            showsVerticalScrollIndicator={false}
-                            keyboardShouldPersistTaps="handled"
-                        >
-                            {/* Provider Picker */}
-                            <Text style={styles.inputLabel}>Select Financial Provider</Text>
-                            <ScrollView
-                                horizontal
-                                showsHorizontalScrollIndicator={false}
-                                contentContainerStyle={styles.providerPickerContainer}
+                    {WALLET_PROVIDERS.map((prov) => {
+                        const isChosen = providerId === prov.id;
+                        return (
+                            <TouchableOpacity
+                                key={prov.id}
+                                style={[styles.providerOption, isChosen && styles.providerOptionSelected]}
+                                onPress={() => handleSelectProvider(prov.id)}
+                                activeOpacity={0.7}
                             >
-                                {WALLET_PROVIDERS.map((prov) => {
-                                    const isChosen = providerId === prov.id;
-                                    return (
-                                        <TouchableOpacity
-                                            key={prov.id}
-                                            style={[styles.providerOption, isChosen && styles.providerOptionSelected]}
-                                            onPress={() => handleSelectProvider(prov.id)}
-                                            activeOpacity={0.7}
-                                        >
-                                            <WalletLogo providerId={prov.id} size={40} />
-                                            <Text
-                                                style={[styles.providerOptionText, isChosen && styles.providerOptionTextSelected]}
-                                                numberOfLines={1}
-                                            >
-                                                {prov.shortName}
-                                            </Text>
-                                            {isChosen && (
-                                                <View style={styles.checkBadge}>
-                                                    <Check size={10} color="#000000" />
-                                                </View>
-                                            )}
-                                        </TouchableOpacity>
-                                    );
-                                })}
-                            </ScrollView>
+                                <WalletLogo providerId={prov.id} size={40} />
+                                <Text
+                                    style={[styles.providerOptionText, isChosen && styles.providerOptionTextSelected]}
+                                    numberOfLines={1}
+                                >
+                                    {prov.shortName}
+                                </Text>
+                                {isChosen && (
+                                    <View style={styles.checkBadge}>
+                                        <Check size={10} color="#000000" />
+                                    </View>
+                                )}
+                            </TouchableOpacity>
+                        );
+                    })}
+                </ScrollView>
 
-                            {/* Wallet Name */}
-                            <Text style={styles.inputLabel}>Wallet Name / Label</Text>
-                            <TextInput
-                                style={styles.textInput}
-                                value={name}
-                                onChangeText={setName}
-                                placeholder="e.g. CBE Savings, Telebirr Personal"
-                                placeholderTextColor={colors.textSecondary}
-                            />
+                {/* Wallet Name */}
+                <Text style={styles.inputLabel}>Wallet Name / Label</Text>
+                <TextInput
+                    style={styles.textInput}
+                    value={name}
+                    onChangeText={setName}
+                    placeholder="e.g. CBE Savings, Telebirr Personal"
+                    placeholderTextColor={colors.textSecondary}
+                />
 
-                            {/* Legitimate Opening Balance */}
-                            <Text style={styles.inputLabel}>Opening Balance (ETB)</Text>
-                            <AmountInput
-                                variant="compact"
-                                value={openingBalance}
-                                onChangeText={setOpeningBalance}
-                            />
-                            <Text style={styles.helperText}>
-                                Enter the true starting balance of this account. This value will be tracked distinctly from transactions.
-                            </Text>
+                {/* Legitimate Opening Balance */}
+                <Text style={styles.inputLabel}>Opening Balance (ETB)</Text>
+                <AmountInput
+                    variant="compact"
+                    value={openingBalance}
+                    onChangeText={setOpeningBalance}
+                />
+                <Text style={styles.helperText}>
+                    Enter the true starting balance of this account. This value will be tracked distinctly from transactions.
+                </Text>
 
-                            {/* Masked identifier / last 4 digits */}
-                            <Text style={styles.inputLabel}>Last 4 Digits / Masked Identifier (Optional)</Text>
-                            <TextInput
-                                style={styles.textInput}
-                                value={accountNumberLast4}
-                                onChangeText={setAccountNumberLast4}
-                                placeholder="e.g. 4821"
-                                keyboardType="number-pad"
-                                maxLength={4}
-                                placeholderTextColor={colors.textSecondary}
-                            />
+                {/* Masked identifier / last 4 digits */}
+                <Text style={styles.inputLabel}>Last 4 Digits / Masked Identifier (Optional)</Text>
+                <TextInput
+                    style={styles.textInput}
+                    value={accountNumberLast4}
+                    onChangeText={setAccountNumberLast4}
+                    placeholder="e.g. 4821"
+                    keyboardType="number-pad"
+                    maxLength={4}
+                    placeholderTextColor={colors.textSecondary}
+                />
 
-                            {/* Default Toggle */}
-                            <View style={styles.switchRow}>
-                                <Text style={styles.switchLabel}>Set as Default Wallet</Text>
-                                <Switch
-                                    value={isDefault}
-                                    onValueChange={setIsDefault}
-                                    thumbColor="#FFFFFF"
-                                    trackColor={{ false: colors.switchTrackOff, true: colors.champagne }}
-                                    ios_backgroundColor={colors.switchTrackOff}
-                                />
-                            </View>
+                {/* Default Toggle */}
+                <View style={styles.switchRow}>
+                    <Text style={styles.switchLabel}>Set as Default Wallet</Text>
+                    <Switch
+                        value={isDefault}
+                        onValueChange={setIsDefault}
+                        thumbColor="#FFFFFF"
+                        trackColor={{ false: colors.switchTrackOff, true: colors.champagne }}
+                        ios_backgroundColor={colors.switchTrackOff}
+                    />
+                </View>
 
-                            <PrimaryButton
-                                label={saving ? 'Creating...' : 'Create Wallet'}
-                                onPress={handleSubmit}
-                                style={styles.submitButton}
-                            />
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </View>
-        </Modal>
+                <PrimaryButton
+                    label={saving ? 'Creating...' : 'Create Wallet'}
+                    onPress={handleSubmit}
+                    style={styles.submitButton}
+                />
+            </ScrollView>
+        </ModalShell>
     );
 }
 
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
     StyleSheet.create({
-        modalRoot: {
-            flex: 1,
-        },
-        backdrop: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: colors.overlay,
-        },
-        keyboardLayer: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 14,
-            paddingVertical: 24,
-        },
-        container: {
-            width: '100%',
-            maxWidth: 500,
-            maxHeight: '88%',
-            backgroundColor: colors.surface + 'F2',
-            borderColor: colors.champagne + '55',
-            borderRadius: 30,
-            borderWidth: 1,
-            overflow: 'hidden',
-            shadowOffset: { width: 0, height: 15 },
-            shadowOpacity: 0.35,
-            shadowRadius: 35,
-            elevation: 25,
-        },
-        glassHighlight: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            borderRadius: 30,
-            borderWidth: 1,
-            pointerEvents: 'none',
-            borderColor: colors.champagne + '18',
-        },
-        header: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingHorizontal: 22,
-            paddingTop: 20,
-            paddingBottom: 18,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-        },
-        headerEyebrow: {
-            fontSize: 10,
-            fontWeight: '700',
-            letterSpacing: 1.5,
-            color: colors.champagne,
-            marginBottom: 4,
-        },
-        headerTitle: {
-            fontSize: 21,
-            fontWeight: '700',
-            color: colors.textPrimary,
-            letterSpacing: -0.3,
-        },
         scroll: {
             flexGrow: 0,
         },

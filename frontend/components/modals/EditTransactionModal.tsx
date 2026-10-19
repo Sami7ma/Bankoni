@@ -1,12 +1,13 @@
 // components/modals/EditTransactionModal.tsx
 import { useEffect, useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Modal, ScrollView, KeyboardAvoidingView, Platform, Pressable, } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 
 import { Transaction } from '../../types/Transaction';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import useTheme from '../../hooks/useTheme';
 
-import CloseButton from '../common/buttons/CloseButton';
+import ModalShell from '../common/overlays/ModalShell';
+import ModalHeader from '../common/overlays/ModalHeader';
 import AmountInput from '../common/inputs/AmountInput';
 import CategoryPicker from '../common/selectors/CategoryPicker';
 import WalletPicker from '../common/selectors/WalletPicker';
@@ -86,217 +87,124 @@ export default function EditTransactionModal({
     const accentColor = type === 'CREDIT' ? colors.success : colors.danger;
 
     return (
-        <Modal
-            visible={visible}
-            transparent
-            animationType="fade"
-            onRequestClose={onClose}
-            statusBarTranslucent
-        >
-            <View style={styles.modalRoot}>
-                {/* Backdrop */}
-                <Pressable style={styles.backdrop} onPress={onClose} />
+        <ModalShell visible={visible} onRequestClose={onClose}>
+            <ModalHeader
+                eyebrow="EDIT RECORD"
+                title={type === 'CREDIT' ? 'Edit Income' : 'Edit Expense'}
+                onClose={onClose}
+            />
 
-                {/* Centered Floating Card */}
-                <KeyboardAvoidingView
-                    style={styles.keyboardLayer}
-                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-                >
-                    <View style={styles.container}>
-                        {/* Subtle inner glass highlight */}
-                        <View pointerEvents="none" style={styles.glassHighlight} />
-
-                        {/* HEADER */}
-                        <View style={styles.header}>
-                            <View>
-                                <Text style={styles.headerEyebrow}>EDIT RECORD</Text>
-                                <Text style={styles.headerTitle}>
-                                    {type === 'CREDIT' ? 'Edit Income' : 'Edit Expense'}
-                                </Text>
-                            </View>
-                            <CloseButton onPress={onClose} />
-                        </View>
-
-                        {/* FORM */}
-                        <ScrollView
-                            style={styles.scroll}
-                            contentContainerStyle={styles.form}
-                            showsVerticalScrollIndicator={false}
-                            keyboardShouldPersistTaps="handled"
+            {/* FORM */}
+            <ScrollView
+                style={styles.scroll}
+                contentContainerStyle={styles.form}
+                showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
+            >
+                {/* TYPE TOGGLE */}
+                <View style={styles.toggleContainer}>
+                    <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                            setType('DEBIT');
+                            setSelectedCategoryId('');
+                        }}
+                        style={[
+                            styles.toggleButton,
+                            type === 'DEBIT' && {
+                                borderColor: colors.danger,
+                                backgroundColor: colors.danger + '10',
+                            },
+                        ]}
+                    >
+                        <View style={[styles.typeDot, { backgroundColor: colors.danger }]} />
+                        <Text
+                            style={[
+                                styles.toggleText,
+                                {
+                                    color: type === 'DEBIT'
+                                        ? colors.danger
+                                        : colors.textSecondary,
+                                },
+                            ]}
                         >
-                            {/* TYPE TOGGLE */}
-                            <View style={styles.toggleContainer}>
-                                <TouchableOpacity
-                                    activeOpacity={0.8}
-                                    onPress={() => {
-                                        setType('DEBIT');
-                                        setSelectedCategoryId('');
-                                    }}
-                                    style={[
-                                        styles.toggleButton,
-                                        type === 'DEBIT' && {
-                                            borderColor: colors.danger,
-                                            backgroundColor: colors.danger + '10',
-                                        },
-                                    ]}
-                                >
-                                    <View style={[styles.typeDot, { backgroundColor: colors.danger }]} />
-                                    <Text
-                                        style={[
-                                            styles.toggleText,
-                                            {
-                                                color: type === 'DEBIT'
-                                                    ? colors.danger
-                                                    : colors.textSecondary,
-                                            },
-                                        ]}
-                                    >
-                                        Expense
-                                    </Text>
-                                </TouchableOpacity>
+                            Expense
+                        </Text>
+                    </TouchableOpacity>
 
-                                <TouchableOpacity
-                                    activeOpacity={0.8}
-                                    onPress={() => {
-                                        setType('CREDIT');
-                                        setSelectedCategoryId('');
-                                    }}
-                                    style={[
-                                        styles.toggleButton,
-                                        type === 'CREDIT' && {
-                                            borderColor: colors.success,
-                                            backgroundColor: colors.success + '10',
-                                        },
-                                    ]}
-                                >
-                                    <View style={[styles.typeDot, { backgroundColor: colors.success }]} />
-                                    <Text
-                                        style={[
-                                            styles.toggleText,
-                                            {
-                                                color: type === 'CREDIT'
-                                                    ? colors.success
-                                                    : colors.textSecondary,
-                                            },
-                                        ]}
-                                    >
-                                        Income
-                                    </Text>
-                                </TouchableOpacity>
-                            </View>
+                    <TouchableOpacity
+                        activeOpacity={0.8}
+                        onPress={() => {
+                            setType('CREDIT');
+                            setSelectedCategoryId('');
+                        }}
+                        style={[
+                            styles.toggleButton,
+                            type === 'CREDIT' && {
+                                borderColor: colors.success,
+                                backgroundColor: colors.success + '10',
+                            },
+                        ]}
+                    >
+                        <View style={[styles.typeDot, { backgroundColor: colors.success }]} />
+                        <Text
+                            style={[
+                                styles.toggleText,
+                                {
+                                    color: type === 'CREDIT'
+                                        ? colors.success
+                                        : colors.textSecondary,
+                                },
+                            ]}
+                        >
+                            Income
+                        </Text>
+                    </TouchableOpacity>
+                </View>
 
-                            {/* AMOUNT */}
-                            <AmountInput
-                                value={amount}
-                                onChangeText={setAmount}
-                                variant="large"
-                            />
+                {/* AMOUNT */}
+                <AmountInput
+                    value={amount}
+                    onChangeText={setAmount}
+                    variant="large"
+                />
 
-                            {/* CATEGORY */}
-                            <CategoryPicker
-                                categories={filteredCategories}
-                                selectedId={selectedCategoryId}
-                                onSelect={setSelectedCategoryId}
-                                placeholder="Select a category"
-                                flow={type === 'DEBIT' ? 'EXPENSE' : 'INCOME'}
-                            />
+                {/* CATEGORY */}
+                <CategoryPicker
+                    categories={filteredCategories}
+                    selectedId={selectedCategoryId}
+                    onSelect={setSelectedCategoryId}
+                    placeholder="Select a category"
+                    flow={type === 'DEBIT' ? 'EXPENSE' : 'INCOME'}
+                />
 
-                            {/* WALLET / ACCOUNT */}
-                            <WalletPicker
-                                wallets={wallets}
-                                selectedId={selectedWalletId}
-                                onSelect={(id) => setSelectedWalletId(id || '')}
-                                label={type === 'CREDIT' ? 'Deposit Into' : 'Pay From'}
-                            />
+                {/* WALLET / ACCOUNT */}
+                <WalletPicker
+                    wallets={wallets}
+                    selectedId={selectedWalletId}
+                    onSelect={(id) => setSelectedWalletId(id || '')}
+                    label={type === 'CREDIT' ? 'Deposit Into' : 'Pay From'}
+                />
 
-                            {/* NOTE */}
-                            <NoteInput
-                                value={note}
-                                onChangeText={setNote}
-                            />
+                {/* NOTE */}
+                <NoteInput
+                    value={note}
+                    onChangeText={setNote}
+                />
 
-                            {/* SUBMIT */}
-                            <PrimaryButton
-                                label="Save Changes"
-                                onPress={handleSubmit}
-                                color={accentColor}
-                            />
-                        </ScrollView>
-                    </View>
-                </KeyboardAvoidingView>
-            </View>
-        </Modal>
+                {/* SUBMIT */}
+                <PrimaryButton
+                    label="Save Changes"
+                    onPress={handleSubmit}
+                    color={accentColor}
+                />
+            </ScrollView>
+        </ModalShell>
     );
 }
 
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
     StyleSheet.create({
-        modalRoot: {
-            flex: 1,
-        },
-        backdrop: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            backgroundColor: colors.overlay,
-        },
-        keyboardLayer: {
-            flex: 1,
-            alignItems: 'center',
-            justifyContent: 'center',
-            paddingHorizontal: 14,
-            paddingVertical: 24,
-        },
-        container: {
-            width: '100%',
-            maxWidth: 500,
-            maxHeight: '88%',
-            backgroundColor: colors.surface + 'F2',
-            borderColor: colors.champagne + '55',
-            borderRadius: 30,
-            borderWidth: 1,
-            overflow: 'hidden',
-            shadowOffset: { width: 0, height: 15 },
-            shadowOpacity: 0.35,
-            shadowRadius: 35,
-            elevation: 25,
-        },
-        glassHighlight: {
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: 0,
-            bottom: 0,
-            borderRadius: 30,
-            borderWidth: 1,
-            pointerEvents: 'none',
-            borderColor: colors.champagne + '18',
-        },
-        header: {
-            flexDirection: 'row',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            paddingHorizontal: 22,
-            paddingTop: 20,
-            paddingBottom: 18,
-            borderBottomWidth: 1,
-            borderBottomColor: colors.border,
-        },
-        headerEyebrow: {
-            fontSize: 10,
-            fontWeight: '700',
-            letterSpacing: 1.5,
-            color: colors.champagne,
-            marginBottom: 4,
-        },
-        headerTitle: {
-            fontSize: 21,
-            fontWeight: '700',
-            color: colors.textPrimary,
-            letterSpacing: -0.3,
-        },
         scroll: {
             flexGrow: 0,
         },
