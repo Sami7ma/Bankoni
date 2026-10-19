@@ -23,6 +23,7 @@ export interface ThemeColors {
     cardGlassTo: string;    // Glass card gradient stop 3
     cardChipLine: string;   // Chip line color on the card
     cardGlow: string;       // Glass catch-light / top highlight
+    switchTrackOff: string; // Clearly visible switch track when turned off
 }
 
 // dark theme our original navy + gold)
@@ -46,6 +47,7 @@ export const darkTheme: ThemeColors = {
     cardGlassTo: 'rgba(5,8,18,1)',
     cardChipLine: 'rgba(0,0,0,0.25)',
     cardGlow: 'rgba(255,255,255,0.04)',
+    switchTrackOff: '#283347',
 };
 // lightmode clenat white + gold
 export const lightTheme: ThemeColors = {
@@ -68,4 +70,5 @@ export const lightTheme: ThemeColors = {
     cardGlassTo: 'rgba(240,236,226,0.95)',
     cardChipLine: 'rgba(255,255,255,0.5)',
     cardGlow: 'rgba(255,255,255,0.6)',
+    switchTrackOff: '#D1CAB9',
 };

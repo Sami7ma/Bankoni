@@ -228,7 +228,8 @@ export default function RegisterScreen({ navigation }: Props) {
                 value={enableBiometrics}
                 onValueChange={setEnableBiometrics}
                 disabled={loading}
-                trackColor={{ false: colors.border, true: colors.champagne }}
+                trackColor={{ false: colors.switchTrackOff, true: colors.champagne }}
+                ios_backgroundColor={colors.switchTrackOff}
                 thumbColor="#FFFFFF"
                 accessibilityLabel="Enable biometric unlock"
               />
