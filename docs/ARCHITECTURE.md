@@ -2,7 +2,7 @@
 
 ## Entry flow
 
-`frontend/index.ts` → `App.tsx` → `app/navigation/AppNavigator.tsx`
+`index.ts` → `App.tsx` → `app/navigation/AppNavigator.tsx`
 
 Navigation uses **React Navigation** (a stack for auth plus bottom tabs). It does **not** use Expo Router. The `(app)` and `(auth)` folder names are organizational only.
 

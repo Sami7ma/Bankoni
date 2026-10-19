@@ -49,23 +49,22 @@ App tabs: **Home, Transactions, Wallets, Budgets, Analytics, Settings**.
 .
 ├── README.md
 ├── .easignore               # what EAS uploads; keeps docs/ out of builds
-├── docs/
-│   ├── ARCHITECTURE.md
-│   ├── DEVELOPMENT.md
-│   ├── screenshots/         # README images only (not bundled)
-│   └── design-source/       # raw source art (not bundled)
-│       └── bank-icons/
-└── frontend/                # the Expo app
-    ├── App.tsx, index.ts
-    ├── app/                 # screens + navigation
-    ├── components/
-    ├── constants/
-    ├── db/                  # SQLite schema and repository
-    ├── hooks/
-    ├── security/            # PIN hashing
-    ├── store/               # Zustand store
-    ├── types/
-    └── assets/              # only what the app actually bundles
+├── App.tsx, index.ts        # entry points
+├── app/                     # screens + navigation
+├── components/
+├── constants/
+├── db/                      # SQLite schema and repository
+├── hooks/
+├── security/                # PIN hashing
+├── store/                   # Zustand store
+├── types/
+├── assets/                  # only what the app actually bundles
+└── docs/
+    ├── ARCHITECTURE.md
+    ├── DEVELOPMENT.md
+    ├── screenshots/         # README images only (not bundled)
+    └── design-source/       # raw source art (not bundled)
+        └── bank-icons/
 ```
 
 ## Quick start
@@ -73,7 +72,7 @@ App tabs: **Home, Transactions, Wallets, Budgets, Analytics, Settings**.
 Requires Node 22.13+ and npm.
 
 ```bash
-npm --prefix frontend ci
+npm ci
 npm start            # Expo dev server
 npm run android      # build and run on an Android device or emulator
 ```

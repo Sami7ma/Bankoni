@@ -1,10 +1,10 @@
 # EAS Build upload filter.
 #
 # When this file exists, EAS CLI uses it INSTEAD of .gitignore (it does not
-# merge them), so everything from .gitignore (root + frontend/.gitignore) is
-# repeated here, followed by the extra exclusions below.
+# merge them), so everything from .gitignore is repeated here, followed by
+# the extra exclusions below.
 
-# --- copied from .gitignore (root and frontend/) ---
+# --- copied from .gitignore ---
 
 # dependencies
 node_modules/
@@ -50,8 +50,6 @@ yarn-error.*
 # generated native folders
 /ios
 /android
-frontend/ios
-frontend/android
 
 # local agent tooling
 claude
