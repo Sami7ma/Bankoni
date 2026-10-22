@@ -84,7 +84,7 @@ export default function HomeBudgetPreview() {
         <View>
             {/* Section Header */}
             <View style={styles.sectionHeader}>
-                <Text style={styles.sectionTitle}>Budgets This Month</Text>
+                <Text style={styles.sectionTitle}>Budgets</Text>
                 <TouchableOpacity onPress={() => navigation.navigate('Budgets' as never)}>
                     <Text style={styles.seeAll}>See all</Text>
                 </TouchableOpacity>

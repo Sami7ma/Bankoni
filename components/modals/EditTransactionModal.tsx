@@ -190,6 +190,11 @@ export default function EditTransactionModal({
                 <NoteInput
                     value={note}
                     onChangeText={setNote}
+                    placeholder={
+                        type === 'CREDIT'
+                            ? 'e.g. Salary, Freelance, Bonus'
+                            : 'e.g. Coffee at Tomoca'
+                    }
                 />
 
                 {/* SUBMIT */}

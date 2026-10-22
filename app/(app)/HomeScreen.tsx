@@ -8,6 +8,7 @@ import useBanKoniStore from '../../store/useBanKoniStore';
 import { useRef, useState } from 'react';
 import BalanceCards, { BalanceCardsRef } from '../../components/home/BalanceCards';
 import AddTransactionModal from '../../components/modals/AddTransactionModal';
+import SmsImportModal from '../../components/modals/SmsImportModal';
 import HomeSpendingChart from '../../components/home/HomeSpendingChart';
 import HomeBudgetPreview from '../../components/home/HomeBudgetPreview';
 import HomeRecentTransactions from '../../components/home/HomeRecentTransactions';
@@ -23,6 +24,7 @@ export default function HomeScreen() {
     const cardsRef = useRef<BalanceCardsRef>(null);
     const [modalVisible, setModalVisible] = useState(false);
     const [modalType, setModalType] = useState<'CREDIT' | 'DEBIT'>('DEBIT');
+    const [smsModalVisible, setSmsModalVisible] = useState(false);
     const colors = useTheme();
     const styles = createStyles(colors);
 
@@ -85,18 +87,19 @@ export default function HomeScreen() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}>
 
-                {/* Recent Transactions */}
-                <View style={{ marginTop: 10 }}>
-                    <HomeRecentTransactions />
-                </View>
-
-                {/* Budget this month */}
-                <View style={{ marginTop: 10 }}>
-                    <HomeBudgetPreview />
-                </View>
                 {/* Spending this month chart */}
                 <View style={{ marginTop: 10 }}>
                     <HomeSpendingChart />
+                </View>
+
+                {/* Budgets */}
+                <View style={{ marginTop: 10 }}>
+                    <HomeBudgetPreview />
+                </View>
+
+                {/* Recent Transactions */}
+                <View style={{ marginTop: 10 }}>
+                    <HomeRecentTransactions />
                 </View>
 
             </ScrollView>
@@ -106,6 +109,13 @@ export default function HomeScreen() {
                 visible={modalVisible}
                 onClose={() => setModalVisible(false)}
                 defaultType={modalType}
+                onOpenSmsImport={() => setSmsModalVisible(true)}
+            />
+
+            {/* SMS TRANSACTION IMPORT MODAL */}
+            <SmsImportModal
+                visible={smsModalVisible}
+                onClose={() => setSmsModalVisible(false)}
             />
         </SafeAreaView>
     );

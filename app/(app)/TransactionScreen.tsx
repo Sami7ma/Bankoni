@@ -6,7 +6,7 @@ import { useState, useMemo } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Modal, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { CalendarDays, CreditCard, Plus, Search, X } from 'lucide-react-native';
+import { CalendarDays, CreditCard, MessageSquareText, Plus, Search, X } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
@@ -14,6 +14,7 @@ import TransactionRow from '../../components/home/TransactionRow';
 import { FlatList } from 'react-native';
 import AddTransactionModal from '../../components/modals/AddTransactionModal';
 import EditTransactionModal from '../../components/modals/EditTransactionModal';
+import SmsImportModal from '../../components/modals/SmsImportModal';
 import { Transaction } from '../../types/Transaction';
 
 export default function TransactionScreen() {
@@ -49,6 +50,7 @@ export default function TransactionScreen() {
     const [filter, setFilter] = useState<'ALL' | 'CREDIT' | 'DEBIT'>('ALL');
     const [modalVisible, setModalVisible] = useState(false);
     const [modalType] = useState<'CREDIT' | 'DEBIT'>('DEBIT');
+    const [smsModalVisible, setSmsModalVisible] = useState(false);
     // calnder visibility 
     const [calendarVisible, setCalendarVisible] = useState(false);
     // show transarin form every dates
@@ -131,13 +133,25 @@ export default function TransactionScreen() {
                     </Text>
                 </View>
 
-                <TouchableOpacity
-                    style={styles.addButton}
-                    onPress={() => setModalVisible(true)}
-                    activeOpacity={0.8}
-                >
-                    <Plus size={21} color={colors.background} />
-                </TouchableOpacity>
+                <View style={styles.headerActions}>
+                    <TouchableOpacity
+                        style={styles.smsButton}
+                        onPress={() => setSmsModalVisible(true)}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Import from SMS"
+                    >
+                        <MessageSquareText size={20} color={colors.champagne} />
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={styles.addButton}
+                        onPress={() => setModalVisible(true)}
+                        activeOpacity={0.8}
+                        accessibilityLabel="Add Transaction"
+                    >
+                        <Plus size={21} color={colors.background} />
+                    </TouchableOpacity>
+                </View>
             </View>
 
             {/* search bar */}
@@ -337,11 +351,16 @@ export default function TransactionScreen() {
                 visible={modalVisible}
                 onClose={() => setModalVisible(false)}
                 defaultType={modalType}
+                onOpenSmsImport={() => setSmsModalVisible(true)}
             />
             <EditTransactionModal
                 visible={!!editingTx}
                 transaction={editingTx}
                 onClose={() => setEditingTx(null)}
+            />
+            <SmsImportModal
+                visible={smsModalVisible}
+                onClose={() => setSmsModalVisible(false)}
             />
 
         </SafeAreaView >
@@ -379,6 +398,21 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         marginTop: 4,
     },
 
+    headerActions: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+    },
+    smsButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: colors.surfaceAlt,
+        borderWidth: 1,
+        borderColor: `${colors.champagne}40`,
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
     addButton: {
         width: 44,
         height: 44,
@@ -386,7 +420,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         backgroundColor: colors.champagne,
         alignItems: 'center',
         justifyContent: 'center',
-        marginLeft: 10,
     },
     searchContainer: {
         flexDirection: 'row',

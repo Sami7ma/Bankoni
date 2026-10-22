@@ -3,6 +3,7 @@
 // Eyebrow + title on the left, close button on the right, with a bottom
 // divider. Used inside <ModalShell>. Presentation only.
 
+import React, { ReactNode } from 'react';
 import { StyleProp, StyleSheet, Text, View, ViewStyle } from 'react-native';
 
 import useTheme from '../../../hooks/useTheme';
@@ -14,6 +15,7 @@ interface ModalHeaderProps {
     onClose: () => void;
     noBorder?: boolean;
     headerStyle?: StyleProp<ViewStyle>;
+    rightAction?: ReactNode;
 }
 
 export default function ModalHeader({
@@ -22,17 +24,21 @@ export default function ModalHeader({
     onClose,
     noBorder = false,
     headerStyle,
+    rightAction,
 }: ModalHeaderProps) {
     const colors = useTheme();
     const styles = createStyles(colors);
 
     return (
         <View style={[styles.header, noBorder && styles.noBorder, headerStyle]}>
-            <View>
+            <View style={styles.titleContainer}>
                 <Text style={styles.headerEyebrow}>{eyebrow}</Text>
                 <Text style={styles.headerTitle}>{title}</Text>
             </View>
-            <CloseButton onPress={onClose} />
+            <View style={styles.rightActionsContainer}>
+                {rightAction}
+                <CloseButton onPress={onClose} />
+            </View>
         </View>
     );
 }
@@ -52,6 +58,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         noBorder: {
             borderBottomWidth: 0,
         },
+        titleContainer: {
+            flex: 1,
+            marginRight: 10,
+        },
         headerEyebrow: {
             fontSize: 10,
             fontWeight: '700',
@@ -64,5 +74,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             fontWeight: '700',
             color: colors.textPrimary,
             letterSpacing: -0.3,
+        },
+        rightActionsContainer: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
         },
     });

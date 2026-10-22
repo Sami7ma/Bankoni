@@ -21,6 +21,7 @@ import {
     StyleSheet,
     ScrollView,
 } from 'react-native';
+import { MessageSquareText } from 'lucide-react-native';
 
 import useBanKoniStore from '../../store/useBanKoniStore';
 import useTheme from '../../hooks/useTheme';
@@ -41,10 +42,16 @@ interface AddTransactionModalProps {
     visible: boolean;
     onClose: () => void;
     defaultType: 'CREDIT' | 'DEBIT';
+    onOpenSmsImport?: () => void;
 }
 
 // COMPONENT
-export default function AddTransactionModal({ visible, onClose, defaultType, }: AddTransactionModalProps) {
+export default function AddTransactionModal({
+    visible,
+    onClose,
+    defaultType,
+    onOpenSmsImport,
+}: AddTransactionModalProps) {
     // THEME
     const colors = useTheme();
     // Styles must be created using the current theme.
@@ -134,6 +141,23 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
                 eyebrow="TRANSACTION"
                 title={type === 'CREDIT' ? 'Add Income' : 'Add Expense'}
                 onClose={onClose}
+                rightAction={
+                    onOpenSmsImport ? (
+                        <TouchableOpacity
+                            style={styles.headerImportButton}
+                            onPress={() => {
+                                onClose();
+                                onOpenSmsImport();
+                            }}
+                            activeOpacity={0.75}
+                            accessibilityLabel="Import SMS"
+                            accessibilityRole="button"
+                        >
+                            <MessageSquareText size={14} color={colors.champagne} />
+                            <Text style={styles.headerImportButtonText}>Import SMS</Text>
+                        </TouchableOpacity>
+                    ) : null
+                }
             />
 
             {/* FORM */}
@@ -215,7 +239,6 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
                     value={amount}
                     onChangeText={setAmount}
                     variant="large"
-                    autoFocus
                 />
 
                 {/* CATEGORY — was ~60 lines, now 1 component */}
@@ -239,6 +262,11 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
                 <NoteInput
                     value={note}
                     onChangeText={setNote}
+                    placeholder={
+                        type === 'CREDIT'
+                            ? 'e.g. Salary, Freelance, Bonus'
+                            : 'e.g. Coffee at Tomoca'
+                    }
                 />
 
                 {/* SUBMIT — was ~10 lines, now 1 component */}
@@ -247,6 +275,20 @@ export default function AddTransactionModal({ visible, onClose, defaultType, }: 
                     onPress={handleSubmit}
                     color={accentColor}
                 />
+
+                {onOpenSmsImport && (
+                    <TouchableOpacity
+                        style={styles.smsImportLink}
+                        onPress={() => {
+                            onClose();
+                            onOpenSmsImport();
+                        }}
+                        activeOpacity={0.7}
+                    >
+                        <MessageSquareText size={15} color={colors.champagne} />
+                        <Text style={styles.smsImportLinkText}>Import from SMS instead</Text>
+                    </TouchableOpacity>
+                )}
 
             </ScrollView>
         </ModalShell>
@@ -319,5 +361,35 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         letterSpacing: 1,
         color: colors.textSecondary,
         textTransform: 'uppercase',
+    },
+    smsImportLink: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 6,
+        paddingVertical: 10,
+        marginTop: 4,
+    },
+    smsImportLinkText: {
+        fontSize: 13,
+        fontWeight: '600',
+        color: colors.champagne,
+    },
+    headerImportButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 5,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        borderRadius: 16,
+        backgroundColor: colors.surfaceAlt,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    headerImportButtonText: {
+        fontSize: 12,
+        fontWeight: '600',
+        color: colors.champagne,
+        letterSpacing: 0.2,
     },
 });

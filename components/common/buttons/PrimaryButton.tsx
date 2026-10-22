@@ -26,6 +26,7 @@ interface PrimaryButtonProps {
   color?: string;       // Optional — defaults to colors.champagne
   style?: ViewStyle;    // Optional — extra styles from the parent
   disabled?: boolean;
+  loading?: boolean;
 }
 export default function PrimaryButton({
   label,
@@ -33,24 +34,26 @@ export default function PrimaryButton({
   color,
   style,
   disabled = false,
+  loading = false,
 }: PrimaryButtonProps) {
   const colors = useTheme();
   const styles = createStyles(colors);
+
+  const isBlocked = disabled || loading;
 
   return (
     <TouchableOpacity
       style={[
         styles.button,
         color ? { backgroundColor: color, shadowColor: color } : null,
-        disabled && styles.buttonDisabled, // Apply disabled style if true
+        isBlocked && styles.buttonDisabled,
         style,
       ]}
       onPress={onPress}
-      disabled={disabled} // <-- Native prop to prevent presses
-      activeOpacity={disabled ? 1 : 0.7} // Prevent fade effect when disabled
+      disabled={isBlocked}
+      activeOpacity={isBlocked ? 1 : 0.7}
     >
-      {/* Show a loading spinner if disabled (assuming disabled means loading) */}
-      {disabled ? (
+      {loading ? (
         <ActivityIndicator size="small" color={colors.surface} />
       ) : (
         <Text style={styles.text}>{label}</Text>

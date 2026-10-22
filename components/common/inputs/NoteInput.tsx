@@ -24,7 +24,7 @@ interface NoteInputProps {
 export default function NoteInput({
     value,
     onChangeText,
-    placeholder = 'e.g. Coffee at Tomoca',
+    placeholder = 'Add a note...',
     label = 'Note',
 }: NoteInputProps) {
     const colors = useTheme();
