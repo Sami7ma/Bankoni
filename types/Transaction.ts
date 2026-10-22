@@ -20,6 +20,9 @@ export interface Transaction {
     status: TransactionStatus;    // Pending or Cleared?
     walletId: string;             // Which wallet/account was used?
     currentBalance?: number;      // Balance after this transaction (optional, calculated)
+    source?: 'manual' | 'sms';    // Provenance of the transaction record
+    smsReference?: string;        // Authoritative provider reference (e.g., FT..., RA...)
+    smsFingerprint?: string;      // Deterministic deduplication hash
     createdAt: string;            // When was this record created?
 }
 

@@ -36,6 +36,8 @@ interface TransactionRow {
     current_balance: number | null;
     source: string | null;
     raw_sms: string | null;
+    sms_reference: string | null;
+    sms_fingerprint: string | null;
     created_at: string;
 }
 
@@ -178,6 +180,8 @@ const INDEXES_AND_TRIGGERS_SQL = `
   CREATE INDEX IF NOT EXISTS idx_budgets_wallet ON budgets(wallet_id);
   CREATE UNIQUE INDEX IF NOT EXISTS idx_users_single_profile ON users ((1));
   CREATE UNIQUE INDEX IF NOT EXISTS idx_wallet_single_default ON wallets(is_default) WHERE is_default = 1;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_unique_sms_ref ON transactions(sms_reference) WHERE sms_reference IS NOT NULL;
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_unique_sms_fingerprint ON transactions(sms_fingerprint) WHERE sms_fingerprint IS NOT NULL;
 
   -- These guards complement PRAGMA foreign_keys.
   CREATE TRIGGER IF NOT EXISTS trg_transactions_validate_insert
@@ -280,6 +284,12 @@ async function ensureColumnsExist(db: SQLite.SQLiteDatabase): Promise<void> {
         }
         if (!txCols.has('raw_sms')) {
             await db.runAsync('ALTER TABLE transactions ADD COLUMN raw_sms TEXT;');
+        }
+        if (!txCols.has('sms_reference')) {
+            await db.runAsync('ALTER TABLE transactions ADD COLUMN sms_reference TEXT;');
+        }
+        if (!txCols.has('sms_fingerprint')) {
+            await db.runAsync('ALTER TABLE transactions ADD COLUMN sms_fingerprint TEXT;');
         }
     }
 }
@@ -421,6 +431,9 @@ function mapTransaction(row: TransactionRow): Transaction {
         status: row.status,
         walletId: row.wallet_id,
         currentBalance: row.current_balance == null ? undefined : Number(row.current_balance),
+        source: (row.source as 'manual' | 'sms') || 'manual',
+        smsReference: row.sms_reference || undefined,
+        smsFingerprint: row.sms_fingerprint || undefined,
         createdAt: row.created_at,
     };
 }
@@ -685,10 +698,31 @@ export async function insertTransactionDB(tx: Transaction): Promise<void> {
     assertValidTransaction(tx);
     await withExclusiveTransaction(async (db) => {
         await assertTransactionReferences(db, tx);
+
+        // Pre-validate duplicate constraints with descriptive errors
+        if (tx.smsReference) {
+            const existing = await db.getFirstAsync<{ id: string }>(
+                'SELECT id FROM transactions WHERE sms_reference = ?;',
+                [tx.smsReference],
+            );
+            if (existing) {
+                throw new Error(`A transaction with reference "${tx.smsReference}" has already been imported.`);
+            }
+        }
+        if (tx.smsFingerprint) {
+            const existing = await db.getFirstAsync<{ id: string }>(
+                'SELECT id FROM transactions WHERE sms_fingerprint = ?;',
+                [tx.smsFingerprint],
+            );
+            if (existing) {
+                throw new Error('This transaction appears to be a duplicate of an existing record.');
+            }
+        }
+
         await db.runAsync(
             `INSERT INTO transactions
-        (id, amount, type, category_id, note, date, status, wallet_id, current_balance, source, raw_sms, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', NULL, ?);`,
+        (id, amount, type, category_id, note, date, status, wallet_id, current_balance, source, raw_sms, sms_reference, sms_fingerprint, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?);`,
             [
                 tx.id,
                 tx.amount,
@@ -699,6 +733,9 @@ export async function insertTransactionDB(tx: Transaction): Promise<void> {
                 tx.status,
                 tx.walletId,
                 tx.currentBalance ?? null,
+                tx.source || 'manual',
+                tx.smsReference ?? null,
+                tx.smsFingerprint ?? null,
                 tx.createdAt,
             ],
         );
@@ -712,6 +749,39 @@ export async function insertTransactionDB(tx: Transaction): Promise<void> {
             if (walletUpdate.changes !== 1) throw new Error('The selected wallet no longer exists.');
         }
     });
+}
+
+/**
+ * Checks if a transaction with the given reference or fingerprint already exists.
+ * Used for pre-validation in the SMS review UI.
+ */
+export async function checkSmsDuplicateDB(
+    reference?: string,
+    fingerprint?: string,
+): Promise<{ isDuplicate: boolean; matchedBy?: 'reference' | 'fingerprint'; transactionId?: string }> {
+    if (!reference && !fingerprint) {
+        return { isDuplicate: false };
+    }
+    const db = await getDatabase();
+    if (reference) {
+        const row = await db.getFirstAsync<{ id: string }>(
+            'SELECT id FROM transactions WHERE sms_reference = ?;',
+            [reference],
+        );
+        if (row) {
+            return { isDuplicate: true, matchedBy: 'reference', transactionId: row.id };
+        }
+    }
+    if (fingerprint) {
+        const row = await db.getFirstAsync<{ id: string }>(
+            'SELECT id FROM transactions WHERE sms_fingerprint = ?;',
+            [fingerprint],
+        );
+        if (row) {
+            return { isDuplicate: true, matchedBy: 'fingerprint', transactionId: row.id };
+        }
+    }
+    return { isDuplicate: false };
 }
 
 export async function updateTransactionDB(

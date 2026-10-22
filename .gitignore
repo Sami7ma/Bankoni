@@ -50,3 +50,7 @@ claude
 claude.md
 CLAUDE
 CLAUDE.md
+
+# Private SMS and financial samples
+.private-sms-samples/
+.tests/
