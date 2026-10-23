@@ -44,7 +44,7 @@ export default function HomeRecentTransactions() {
             {/* Section Header */}
             <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Recent Transactions</Text>
-                <TouchableOpacity onPress={() => navigation.navigate('Transactions' as never)}>
+                <TouchableOpacity onPress={() => (navigation.navigate as any)('Ledger', { initialTab: 'transactions' })}>
                     <Text style={styles.seeAll}>See all</Text>
                 </TouchableOpacity>
             </View>
