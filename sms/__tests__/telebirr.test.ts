@@ -107,4 +107,83 @@ describe('Telebirr SMS Parser', () => {
             expect(result.messageType).toBe('airtime_receipt');
         }
     });
+
+    it('parses Telebirr P2P transfer with E-Money Account balance structure', () => {
+        const sms =
+            'Dear Customer, You have transferred ETB 50.00 to Zelalem(2519****9789) on 23/10/2026 17:22:20. ' +
+            'Your transaction number is DJN07Y99ZQ. Your current E-Money Account balance is ETB 103.83. ' +
+            'Thank you for using telebirr Ethio telecom';
+
+        const result = parseSms(sms);
+        expect(result.status).toBe('parsed');
+        if (result.status !== 'parsed') return;
+
+        const { candidate } = result;
+        expect(candidate.providerId).toBe('telebirr');
+        expect(candidate.type).toBe('DEBIT');
+        expect(candidate.principalAmount).toBe(50);
+        expect(candidate.ledgerAmount).toBe(50);
+        expect(candidate.counterparty).toBe('Zelalem(2519****9789)');
+        expect(candidate.reference).toBe('DJN07Y99ZQ');
+        expect(candidate.dateTime).toBe('2026-10-23T17:22:20+03:00');
+        expect(candidate.currentBalance).toBe(103.83);
+    });
+
+    it('resiliently parses real-world partial Telebirr clip without throwing parse errors', () => {
+        const sms =
+            'Zelalem(2519****9789) on 23/10/2026 17:22:20. Your transaction number is DJN07Y99ZQ. ' +
+            'Your current E-Money Account balance is ETB 103.83. Thank you for using telebirr Ethio telecom';
+
+        const result = parseSms(sms);
+        expect(result.status).toBe('parsed');
+        if (result.status !== 'parsed') return;
+
+        const { candidate } = result;
+        expect(candidate.providerId).toBe('telebirr');
+        expect(candidate.type).toBe('DEBIT');
+        expect(candidate.counterparty).toBe('Zelalem(2519****9789)');
+        expect(candidate.reference).toBe('DJN07Y99ZQ');
+        expect(candidate.dateTime).toBe('2026-10-23T17:22:20+03:00');
+        expect(candidate.currentBalance).toBe(103.83);
+        expect(candidate.warnings.length).toBeGreaterThan(0);
+    });
+
+    it('detects debited vs credited directions accurately in Telebirr notifications', () => {
+        const debitedSms =
+            'Your account has been debited with ETB 250.00 on 23/10/2026 14:15:00 for payment to Tomoca Coffee. ' +
+            'Your transaction number is DJN999. Your current E-Money Account balance is ETB 500.00. Ethio telecom';
+        const debitedResult = parseSms(debitedSms);
+        expect(debitedResult.status).toBe('parsed');
+        if (debitedResult.status === 'parsed') {
+            expect(debitedResult.candidate.type).toBe('DEBIT');
+            expect(debitedResult.candidate.principalAmount).toBe(250);
+            expect(debitedResult.candidate.reference).toBe('DJN999');
+        }
+
+        const creditedSms =
+            'Your account has been credited with ETB 1,500.00 on 23/10/2026 14:15:00 from Zelalem(2519****9789). ' +
+            'Your transaction number is DJN888. Your current E-Money Account balance is ETB 2,000.00. Ethio telecom';
+        const creditedResult = parseSms(creditedSms);
+        expect(creditedResult.status).toBe('parsed');
+        if (creditedResult.status === 'parsed') {
+            expect(creditedResult.candidate.type).toBe('CREDIT');
+            expect(creditedResult.candidate.principalAmount).toBe(1500);
+            expect(creditedResult.candidate.reference).toBe('DJN888');
+        }
+    });
+
+    it('parses Telebirr merchant payments correctly', () => {
+        const merchantSms =
+            'Dear Customer, You have paid ETB 350.00 to Merchant Tomoca Coffee on 23/10/2026 11:30:00. ' +
+            'Your transaction number is TR554433. Your current balance is ETB 1,200.00. Thank you for using telebirr. Ethio telecom';
+
+        const result = parseSms(merchantSms);
+        expect(result.status).toBe('parsed');
+        if (result.status !== 'parsed') return;
+
+        expect(result.candidate.type).toBe('DEBIT');
+        expect(result.candidate.principalAmount).toBe(350);
+        expect(result.candidate.counterparty).toBe('Tomoca Coffee');
+        expect(result.candidate.reference).toBe('TR554433');
+    });
 });

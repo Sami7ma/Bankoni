@@ -64,6 +64,45 @@ describe('SMS Import & Parsing Integration Tests', () => {
             isArchived: false,
             createdAt: '2026-01-01T00:00:00Z',
         },
+        {
+            id: 'w-mpesa',
+            name: 'M-PESA Wallet',
+            icon: 'smartphone',
+            providerId: 'mpesa',
+            openingBalance: 1000,
+            balance: 1000,
+            currency: 'ETB',
+            accountNumberLast4: '7890',
+            isDefault: false,
+            isArchived: false,
+            createdAt: '2026-01-01T00:00:00Z',
+        },
+        {
+            id: 'w-awash',
+            name: 'Awash Checking',
+            icon: 'bank',
+            providerId: 'awash',
+            openingBalance: 25000,
+            balance: 25000,
+            currency: 'ETB',
+            accountNumberLast4: '1234',
+            isDefault: false,
+            isArchived: false,
+            createdAt: '2026-01-01T00:00:00Z',
+        },
+        {
+            id: 'w-boa',
+            name: 'BOA Current Account',
+            icon: 'bank',
+            providerId: 'boa',
+            openingBalance: 12000,
+            balance: 12000,
+            currency: 'ETB',
+            accountNumberLast4: '5678',
+            isDefault: false,
+            isArchived: false,
+            createdAt: '2026-01-01T00:00:00Z',
+        },
     ];
 
     const mockCategories: Category[] = [
@@ -259,5 +298,100 @@ describe('SMS Import & Parsing Integration Tests', () => {
         expect(fp1).not.toBe(fp3);
         // Same inputs produce identical hash
         expect(generateSmsFingerprint(baseCandidate)).toBe(fp1);
+    });
+
+    describe('Phase 2 Provider Integrations & Cross-Institutional Routing', () => {
+        it('processes full M-PESA bundle purchase flow (parse -> DEBIT -> exact wallet match -> fingerprint)', () => {
+            const mpesaSms =
+                'Dear KASSAHUN, you have bought a Safaricom bundle of 160.00 Birr for 0712345678 on 21/10/26 at 12:37 PM. ' +
+                'Transaction number MP2610BND99. Your current M-PESA balance is 282.00 Birr. ' +
+                'Get your receipt here: https://example.com/rcpt';
+
+            const parseResult = parseSms(mpesaSms);
+            expect(parseResult.status).toBe('parsed');
+            if (parseResult.status !== 'parsed') return;
+
+            const candidate = parseResult.candidate;
+            expect(candidate.providerId).toBe('mpesa');
+            expect(candidate.type).toBe('DEBIT');
+            expect(candidate.ledgerAmount).toBe(160.0);
+            expect(candidate.reference).toBe('MP2610BND99');
+            expect(candidate.dateTime).toBe('2026-10-21T12:37:00+03:00');
+
+            const walletOutcome = matchWalletForCandidate(candidate, mockWallets);
+            expect(walletOutcome.confidence).toBe('provider_only');
+            expect(walletOutcome.matchedWallet?.id).toBe('w-mpesa');
+
+            const fp = generateSmsFingerprint(candidate);
+            expect(fp).toHaveLength(64);
+        });
+
+        it('processes full Awash incoming credit flow with exact wallet match (accountLast4)', () => {
+            const awashSms =
+                'Dear Customer, your Account 1000****1234 has been Credited with ETB 2000.00 on 2026-10-14 08:32:28 by ABEBE via IPS DASHEN BANK. ' +
+                'Your balance now is ETB 34720.30. Awash Bank.';
+
+            const parseResult = parseSms(awashSms);
+            expect(parseResult.status).toBe('parsed');
+            if (parseResult.status !== 'parsed') return;
+
+            const candidate = parseResult.candidate;
+            expect(candidate.providerId).toBe('awash');
+            expect(candidate.type).toBe('CREDIT');
+            expect(candidate.accountLast4).toBe('1234');
+
+            // Exact match on Awash checking account ending in 1234
+            const walletOutcome = matchWalletForCandidate(candidate, mockWallets);
+            expect(walletOutcome.confidence).toBe('exact_account');
+            expect(walletOutcome.matchedWallet?.id).toBe('w-awash');
+        });
+
+        it('processes full BOA debit flow with receipt reference extraction and wallet match', () => {
+            const boaSms =
+                'Dear KASSAHUN, your account 1000****5678 was debited with ETB 1,006.00. Available Balance: ETB 10,862.76. ' +
+                'Receipt: https://cs.bankofabyssinia.com/slip/?trx=FT2610BOA001 ' +
+                'Feedback: https://cs.bankofabyssinia.com/cs/?trx=DFT00000000. Bank of Abyssinia.';
+
+            const parseResult = parseSms(boaSms);
+            expect(parseResult.status).toBe('parsed');
+            if (parseResult.status !== 'parsed') return;
+
+            const candidate = parseResult.candidate;
+            expect(candidate.providerId).toBe('boa');
+            expect(candidate.type).toBe('DEBIT');
+            expect(candidate.reference).toBe('FT2610BOA001');
+
+            // Exact match on BOA account ending in 5678
+            const walletOutcome = matchWalletForCandidate(candidate, mockWallets);
+            expect(walletOutcome.confidence).toBe('exact_account');
+            expect(walletOutcome.matchedWallet?.id).toBe('w-boa');
+        });
+
+        it('guarantees that CBE Birr airtime notifications stop before import stage without wallet mutations', () => {
+            const airtimeSms =
+                'Dear Customer, you received 50.00Br. airtime from 0911223344 on 09/04/26 14:36. Thank you for choosing CBE Birr!';
+
+            const parseResult = parseSms(airtimeSms);
+            expect(parseResult.status).toBe('non_transaction');
+            // Does not proceed to candidate generation or wallet matching
+        });
+
+        it('guarantees interbank mentions do not hijack provider resolution across all institutions', () => {
+            // Awash receiving from Dashen via IPS
+            const awashDashen = 'Dear Customer, your Account 1000****1234 has been Credited with ETB 2000.00 by ABEBE via IPS DASHEN BANK. Awash Bank.';
+            expect(parseSms(awashDashen).status === 'parsed' && (parseSms(awashDashen) as any).candidate.providerId).toBe('awash');
+
+            // CBE receiving from Dashen via IPS
+            const cbeDashen = 'Dear Customer, your Account 1000****1234 has been Credited with ETB 500.00 by ABEBE via IPS DASHEN BANK. Thanks for Banking with CBE.';
+            expect(parseSms(cbeDashen).status === 'parsed' && (parseSms(cbeDashen) as any).candidate.providerId).toBe('cbe');
+
+            // M-PESA receiving from CBE B2C
+            const mpesaCbe = 'Dear USER, you have received 300.00 Birr from Commercial Bank Of Ethiopia-B2C on 21/10/26 at 12:37 PM. Transaction number MP123. Your current M-PESA balance is 442.00 Birr.';
+            expect(parseSms(mpesaCbe).status === 'parsed' && (parseSms(mpesaCbe) as any).candidate.providerId).toBe('mpesa');
+
+            // Telebirr transferring to CBE
+            const telebirrCbe = 'Dear Customer, You have transferred ETB 500.00 successfully from your telebirr account 09****4321 to Commercial Bank of Ethiopia account 1000****5678 on 21/10/2026 13:28:24. Your telebirr transaction number is RA99999999. Thank you for using telebirr.';
+            expect(parseSms(telebirrCbe).status === 'parsed' && (parseSms(telebirrCbe) as any).candidate.providerId).toBe('telebirr');
+        });
     });
 });

@@ -88,13 +88,30 @@ describe('SMS Cleaners & Arithmetic', () => {
             expect(parsed).toBe('2026-10-21T13:27:14+03:00');
         });
 
-        it('parses date-only DD/MM/YYYY format', () => {
-            const parsed = parseEthiopianDateTime('21/10/2026');
+        it('parses M-PESA 2-digit year AM/PM format with omitted seconds', () => {
+            const parsed = parseEthiopianDateTime('21/10/26 at 12:37 PM');
+            expect(parsed).toBe('2026-10-21T12:37:00+03:00');
+        });
+
+        it('parses 24-hour 2-digit year format with omitted seconds (CBE Birr)', () => {
+            const parsed = parseEthiopianDateTime('09/04/26 14:36');
+            expect(parsed).toBe('2026-04-09T14:36:00+03:00');
+        });
+
+        it('parses Awash YYYY-MM-DD HH:mm:ss format', () => {
+            const parsed = parseEthiopianDateTime('2026-10-14 08:32:28');
+            expect(parsed).toBe('2026-10-14T08:32:28+03:00');
+        });
+
+        it('parses date-only 2-digit year DD/MM/YY format', () => {
+            const parsed = parseEthiopianDateTime('21/10/26');
             expect(parsed).toBe('2026-10-21T00:00:00+03:00');
         });
 
-        it('returns null on invalid date text', () => {
+        it('returns null on invalid date text or out-of-range values', () => {
             expect(parseEthiopianDateTime('invalid date text')).toBeNull();
+            expect(parseEthiopianDateTime('32/13/2026 at 25:61 PM')).toBeNull();
+            expect(parseEthiopianDateTime('')).toBeNull();
         });
     });
 });
