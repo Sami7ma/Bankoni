@@ -275,21 +275,6 @@ export default function AddTransactionModal({
                     onPress={handleSubmit}
                     color={accentColor}
                 />
-
-                {onOpenSmsImport && (
-                    <TouchableOpacity
-                        style={styles.smsImportLink}
-                        onPress={() => {
-                            onClose();
-                            onOpenSmsImport();
-                        }}
-                        activeOpacity={0.7}
-                    >
-                        <MessageSquareText size={15} color={colors.champagne} />
-                        <Text style={styles.smsImportLinkText}>Import from SMS instead</Text>
-                    </TouchableOpacity>
-                )}
-
             </ScrollView>
         </ModalShell>
     );
@@ -361,19 +346,6 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         letterSpacing: 1,
         color: colors.textSecondary,
         textTransform: 'uppercase',
-    },
-    smsImportLink: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 6,
-        paddingVertical: 10,
-        marginTop: 4,
-    },
-    smsImportLinkText: {
-        fontSize: 13,
-        fontWeight: '600',
-        color: colors.champagne,
     },
     headerImportButton: {
         flexDirection: 'row',
