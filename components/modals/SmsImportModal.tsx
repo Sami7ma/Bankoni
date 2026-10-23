@@ -23,6 +23,7 @@ import {
     Building2,
     Calendar,
     CheckCircle2,
+    Sparkles,
 } from 'lucide-react-native';
 
 import ModalShell from '../common/overlays/ModalShell';
@@ -30,6 +31,7 @@ import ModalHeader from '../common/overlays/ModalHeader';
 import CategoryPicker from '../common/selectors/CategoryPicker';
 import WalletPicker from '../common/selectors/WalletPicker';
 import PrimaryButton from '../common/buttons/PrimaryButton';
+import WalletLogo from '../wallets/WalletLogo';
 
 import useBanKoniStore from '../../store/useBanKoniStore';
 import useTheme from '../../hooks/useTheme';
@@ -55,6 +57,10 @@ const PROVIDER_OPTIONS: Array<{ id: SmsProviderId | 'auto'; label: string }> = [
     { id: 'cbe', label: 'CBE' },
     { id: 'dashen', label: 'Dashen' },
     { id: 'telebirr', label: 'Telebirr' },
+    { id: 'mpesa', label: 'M-PESA' },
+    { id: 'awash', label: 'Awash' },
+    { id: 'boa', label: 'BOA' },
+    { id: 'cbe_birr', label: 'CBE Birr' },
 ];
 
 export default function SmsImportModal({ visible, onClose }: SmsImportModalProps) {
@@ -81,6 +87,7 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
     const [selectedCategoryId, setSelectedCategoryId] = useState<string>('');
     const [confirmedDate, setConfirmedDate] = useState<string>('');
     const [note, setNote] = useState<string>('');
+    const [reviewedAmount, setReviewedAmount] = useState<string>('');
 
     // Deduplication & submission state
     const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
@@ -100,6 +107,7 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
             setSelectedWalletId('');
             setSelectedCategoryId('');
             setNote('');
+            setReviewedAmount('');
         }
     }, [visible]);
 
@@ -123,20 +131,26 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
             if (match.matchedWallet) {
                 setSelectedWalletId(match.matchedWallet.id);
             } else {
-                // If no exact provider match found, auto-select user's default wallet as sensible initial selection
-                const activeWallets = wallets.filter((w) => !w.isArchived);
-                const defaultWallet = activeWallets.find((w) => w.isDefault) || activeWallets[0];
-                setSelectedWalletId(defaultWallet?.id || '');
+                // Never silently select an arbitrary wallet when match is ambiguous or missing.
+                // Leave empty so user must explicitly choose from the picker.
+                setSelectedWalletId('');
             }
 
             // 2. Set default date
-            setConfirmedDate(parsedCandidate.dateTime || new Date().toISOString());
+            const initialDate = parsedCandidate.dateTime || new Date().toISOString();
+            setConfirmedDate(initialDate);
 
-            // 3. Set pre-filled note
+            // 3. Set pre-filled note and initial reviewed amount
             setNote(parsedCandidate.description || 'SMS Transaction');
+            setReviewedAmount(parsedCandidate.ledgerAmount > 0 ? parsedCandidate.ledgerAmount.toString() : '');
 
             // 4. Duplicate pre-check
-            const fingerprint = generateSmsFingerprint(parsedCandidate);
+            // When dateTime is absent from SMS, incorporate the initial date to avoid false duplicate collisions
+            const candidateForFp = {
+                ...parsedCandidate,
+                dateTime: parsedCandidate.dateTime || initialDate,
+            };
+            const fingerprint = generateSmsFingerprint(candidateForFp);
             const dupCheck = await checkSmsDuplicateDB(parsedCandidate.reference, fingerprint);
 
             if (dupCheck.isDuplicate) {
@@ -151,8 +165,22 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
                 setDuplicateWarning(null);
             }
 
-            // 5. Reset category selection (must be explicitly picked according to direction)
-            setSelectedCategoryId('');
+            // 5. Automatic category detection for internet / data packages (Telebirr & M-PESA)
+            let autoCatId = '';
+            const isInternetPackage =
+                /internet\s+package|daily\s+internet|monthly\s+internet|unlimited\s+internet|data\s+package|safaricom\s+bundle|\bbundle\b/i.test(
+                    (parsedCandidate.description || '') + ' ' + rawText
+                );
+
+            if (isInternetPackage && parsedCandidate.type === 'DEBIT') {
+                const netCat = categories.find(
+                    (c) => c.flow === 'EXPENSE' && /internet|package|bundle|telecom|wifi/i.test(c.name)
+                );
+                if (netCat) {
+                    autoCatId = netCat.id;
+                }
+            }
+            setSelectedCategoryId(autoCatId);
 
             setStep('review');
         } else if (result.status === 'non_transaction') {
@@ -175,6 +203,14 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
     // Handle user confirmation and database import
     const handleConfirmImport = async () => {
         if (!candidate) return;
+
+        const parsedAmt = parseFloat(reviewedAmount.trim());
+        const finalAmount = !isNaN(parsedAmt) && parsedAmt > 0 ? parsedAmt : candidate.ledgerAmount;
+
+        if (!finalAmount || finalAmount <= 0) {
+            Alert.alert('Amount Required', 'Please enter a valid transaction amount.');
+            return;
+        }
 
         if (!selectedWalletId) {
             Alert.alert('Wallet Required', 'Please select a wallet to record this transaction.');
@@ -203,12 +239,27 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
 
     const executeImport = async () => {
         if (!candidate) return;
+
+        const parsedAmt = parseFloat(reviewedAmount.trim());
+        const finalAmount = !isNaN(parsedAmt) && parsedAmt > 0 ? parsedAmt : candidate.ledgerAmount;
+
+        if (!finalAmount || finalAmount <= 0) {
+            Alert.alert('Amount Required', 'Please enter a valid transaction amount.');
+            return;
+        }
+
         setIsSaving(true);
         try {
-            const fingerprint = generateSmsFingerprint(candidate);
+            const candidateForFp = {
+                ...candidate,
+                ledgerAmount: finalAmount,
+                principalAmount: finalAmount,
+                dateTime: confirmedDate || candidate.dateTime,
+            };
+            const fingerprint = generateSmsFingerprint(candidateForFp);
 
             await addTransaction({
-                amount: candidate.ledgerAmount,
+                amount: finalAmount,
                 type: candidate.type,
                 categoryId: selectedCategoryId,
                 walletId: selectedWalletId,
@@ -227,7 +278,7 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
 
             Alert.alert(
                 'Import Successful',
-                `Saved ${candidate.type === 'DEBIT' ? 'Expense' : 'Income'} of ${formatEtb(candidate.ledgerAmount)} to your wallet.`,
+                `Saved ${candidate.type === 'DEBIT' ? 'Expense' : 'Income'} of ${formatEtb(finalAmount)} to your wallet.`,
                 [{ text: 'OK', onPress: onClose }]
             );
         } catch (error) {
@@ -246,6 +297,16 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
                 return 'Dashen Bank';
             case 'telebirr':
                 return 'Telebirr (Ethio telecom)';
+            case 'mpesa':
+                return 'M-PESA (Safaricom)';
+            case 'awash':
+                return 'Awash Bank';
+            case 'boa':
+                return 'Bank of Abyssinia (BOA)';
+            case 'cbe_birr':
+                return 'CBE Birr';
+            default:
+                return 'Unknown Provider';
         }
     };
 
@@ -272,7 +333,12 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
                         </View>
 
                         <Text style={styles.label}>PROVIDER</Text>
-                        <View style={styles.providerRow}>
+                        <ScrollView
+                            horizontal
+                            showsHorizontalScrollIndicator={false}
+                            contentContainerStyle={styles.providerScroll}
+                            style={styles.providerScrollView}
+                        >
                             {PROVIDER_OPTIONS.map((opt) => {
                                 const selected = providerSelection === opt.id;
                                 return (
@@ -282,13 +348,20 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
                                         onPress={() => setProviderSelection(opt.id)}
                                         activeOpacity={0.8}
                                     >
-                                        <Text style={[styles.providerTabText, selected && styles.providerTabTextActive]}>
+                                        {opt.id === 'auto' ? (
+                                            <View style={[styles.providerAutoBadge, selected && styles.providerAutoBadgeActive]}>
+                                                <Sparkles size={15} color={selected ? colors.champagne : colors.textSecondary} />
+                                            </View>
+                                        ) : (
+                                            <WalletLogo providerId={opt.id} size={22} style={styles.providerLogo} />
+                                        )}
+                                        <Text style={[styles.providerTabText, selected && styles.providerTabTextActive]} numberOfLines={1}>
                                             {opt.label}
                                         </Text>
                                     </TouchableOpacity>
                                 );
                             })}
-                        </View>
+                        </ScrollView>
 
                         <View style={styles.smsInputHeader}>
                             <Text style={styles.label}>SMS MESSAGE TEXT</Text>
@@ -344,11 +417,17 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
                                             {getProviderTitle(candidate.providerId)}
                                         </Text>
                                     </View>
-                                    <View
+                                    <TouchableOpacity
                                         style={[
                                             styles.directionBadge,
                                             candidate.type === 'DEBIT' ? styles.debitBadge : styles.creditBadge,
                                         ]}
+                                        onPress={() => {
+                                            const newType = candidate.type === 'DEBIT' ? 'CREDIT' : 'DEBIT';
+                                            setCandidate({ ...candidate, type: newType });
+                                            setSelectedCategoryId('');
+                                        }}
+                                        activeOpacity={0.75}
                                     >
                                         {candidate.type === 'DEBIT' ? (
                                             <ArrowDownLeft size={13} color={colors.danger} />
@@ -363,24 +442,38 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
                                         >
                                             {candidate.type === 'DEBIT' ? 'EXPENSE' : 'INCOME'}
                                         </Text>
-                                    </View>
+                                    </TouchableOpacity>
                                 </View>
 
-                                {/* Stated Ledger Amount */}
-                                <View style={styles.amountDisplay}>
-                                    <Text style={styles.amountLabel}>
-                                        {candidate.isLedgerAmountDerived ? 'TOTAL DEBIT (INCL. FEES)' : 'LEDGER AMOUNT'}
-                                    </Text>
-                                    <Text
-                                        style={[
-                                            styles.amountValue,
-                                            candidate.type === 'DEBIT' ? styles.debitAmount : styles.creditAmount,
-                                        ]}
-                                    >
-                                        {candidate.type === 'DEBIT' ? '-' : '+'}
-                                        {formatEtb(candidate.ledgerAmount)}
-                                    </Text>
-                                </View>
+                                {/* Stated Ledger Amount or Input */}
+                                {candidate.ledgerAmount <= 0 ? (
+                                    <View style={styles.amountInputSection}>
+                                        <Text style={styles.amountInputSectionLabel}>ENTER TRANSACTION AMOUNT (ETB)</Text>
+                                        <TextInput
+                                            style={styles.amountTextInput}
+                                            value={reviewedAmount}
+                                            onChangeText={setReviewedAmount}
+                                            placeholder="0.00"
+                                            placeholderTextColor={colors.textMuted}
+                                            keyboardType="decimal-pad"
+                                        />
+                                    </View>
+                                ) : (
+                                    <View style={styles.amountDisplay}>
+                                        <Text style={styles.amountLabel}>
+                                            {candidate.isLedgerAmountDerived ? 'TOTAL DEBIT (INCL. FEES)' : 'LEDGER AMOUNT'}
+                                        </Text>
+                                        <Text
+                                            style={[
+                                                styles.amountValue,
+                                                candidate.type === 'DEBIT' ? styles.debitAmount : styles.creditAmount,
+                                            ]}
+                                        >
+                                            {candidate.type === 'DEBIT' ? '-' : '+'}
+                                            {formatEtb(parseFloat(reviewedAmount) > 0 ? parseFloat(reviewedAmount) : candidate.ledgerAmount)}
+                                        </Text>
+                                    </View>
+                                )}
 
                                 {/* Fees Breakdown If Present */}
                                 {candidate.fees && (
@@ -549,7 +642,8 @@ export default function SmsImportModal({ visible, onClose }: SmsImportModalProps
                                 <View style={styles.dateConfirmation}>
                                     <Calendar size={16} color={colors.textSecondary} />
                                     <Text style={styles.dateConfirmText}>
-                                        Date: {new Date(confirmedDate).toLocaleString('en-US', {
+                                        {candidate.dateTime ? 'Date: ' : 'Date (Manual/Current): '}
+                                        {new Date(confirmedDate).toLocaleString('en-US', {
                                             month: 'short',
                                             day: 'numeric',
                                             year: 'numeric',
@@ -624,33 +718,74 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             textTransform: 'uppercase',
             marginBottom: 6,
         },
-        providerRow: {
-            flexDirection: 'row',
-            gap: 8,
+        providerScrollView: {
             marginBottom: 8,
+            marginHorizontal: -4,
+        },
+        providerScroll: {
+            paddingHorizontal: 4,
+            gap: 8,
+            flexDirection: 'row',
+            alignItems: 'center',
         },
         providerTab: {
-            flex: 1,
-            paddingVertical: 9,
-            borderRadius: 8,
-            backgroundColor: colors.surfaceAlt,
+            flexDirection: 'row',
             alignItems: 'center',
-            justifyContent: 'center',
-            borderWidth: 1,
+            gap: 8,
+            paddingVertical: 7,
+            paddingHorizontal: 12,
+            borderRadius: 10,
+            backgroundColor: colors.surfaceAlt,
+            borderWidth: 1.5,
             borderColor: colors.border,
         },
         providerTabActive: {
-            backgroundColor: `${colors.champagne}25`,
+            backgroundColor: `${colors.champagne}18`,
             borderColor: colors.champagne,
+        },
+        providerAutoBadge: {
+            width: 22,
+            height: 22,
+            borderRadius: 6,
+            backgroundColor: colors.surface,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        providerAutoBadgeActive: {
+            backgroundColor: `${colors.champagne}25`,
+        },
+        providerLogo: {
+            borderRadius: 6,
         },
         providerTabText: {
             color: colors.textSecondary,
             fontSize: 12,
-            fontWeight: '500',
+            fontWeight: '600',
         },
         providerTabTextActive: {
             color: colors.champagne,
-            fontWeight: '600',
+            fontWeight: '700',
+        },
+        amountInputSection: {
+            marginTop: 8,
+            padding: 12,
+            backgroundColor: colors.surfaceAlt,
+            borderRadius: 12,
+            borderWidth: 1,
+            borderColor: colors.champagne,
+        },
+        amountInputSectionLabel: {
+            fontSize: 11,
+            fontWeight: '700',
+            color: colors.champagne,
+            letterSpacing: 0.5,
+            marginBottom: 6,
+        },
+        amountTextInput: {
+            fontSize: 22,
+            fontWeight: '700',
+            color: colors.textPrimary,
+            paddingVertical: 4,
         },
         smsInputHeader: {
             flexDirection: 'row',
