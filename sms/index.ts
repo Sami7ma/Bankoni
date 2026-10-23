@@ -7,6 +7,9 @@ import { detectProvider } from './providers/detector';
 import { parseCbeSms } from './providers/cbe';
 import { parseDashenSms } from './providers/dashen';
 import { parseTelebirrSms } from './providers/telebirr';
+import { parseMpesaSms } from './providers/mpesa';
+import { parseAwashSms } from './providers/awash';
+import { parseBoaSms } from './providers/boa';
 import type { SmsProviderId, SmsParseResult } from './types';
 
 export * from './types';
@@ -20,8 +23,8 @@ export { detectProvider } from './providers/detector';
  * Parses raw SMS text into a structured transaction candidate or a typed rejection outcome.
  *
  * @param rawText The raw SMS text input by the user.
- * @param preferredProvider Optional provider specified by the user ('cbe', 'dashen', 'telebirr').
- * @param senderAddress Optional sender header (e.g., 'CBE', 'telebirr').
+ * @param preferredProvider Optional provider specified by the user ('cbe', 'dashen', 'telebirr', 'mpesa', 'awash', 'boa', 'cbe_birr').
+ * @param senderAddress Optional sender header (e.g., 'CBE', 'telebirr', 'MPESA', 'AwashBank', 'BOA').
  */
 export function parseSms(
     rawText: string,
@@ -57,7 +60,7 @@ export function parseSms(
     if (!providerId) {
         return {
             status: 'unsupported_provider',
-            reason: 'Could not determine whether this message is from Commercial Bank of Ethiopia (CBE), Dashen Bank, or Telebirr. Please choose a provider manually.',
+            reason: 'Could not determine whether this message is from a supported provider (CBE, Dashen Bank, Telebirr, M-PESA, Awash Bank, or BOA). Please choose a provider manually.',
         };
     }
 
@@ -69,10 +72,22 @@ export function parseSms(
             return parseDashenSms(text);
         case 'telebirr':
             return parseTelebirrSms(text);
+        case 'mpesa':
+            return parseMpesaSms(text);
+        case 'awash':
+            return parseAwashSms(text);
+        case 'boa':
+            return parseBoaSms(text);
+        case 'cbe_birr':
+            return {
+                status: 'non_transaction',
+                reason: 'CBE Birr airtime notifications and informational announcements do not represent cash transactions to your financial wallet.',
+                messageType: 'airtime_receipt',
+            };
         default:
             return {
                 status: 'unsupported_provider',
-                reason: `Provider '${providerId}' is not currently supported. Supported providers are CBE, Dashen Bank, and Telebirr.`,
+                reason: `Provider '${providerId}' is not currently supported.`,
             };
     }
 }

@@ -2,7 +2,7 @@
 // Pure TypeScript domain types for BanKoni SMS transaction parsing.
 // Independent of React, Zustand, and SQLite.
 
-export type SmsProviderId = 'cbe' | 'dashen' | 'telebirr';
+export type SmsProviderId = 'cbe' | 'dashen' | 'telebirr' | 'mpesa' | 'awash' | 'boa' | 'cbe_birr';
 
 export interface FeeBreakdown {
     serviceCharge?: number;
