@@ -23,6 +23,8 @@ export interface Transaction {
     source?: 'manual' | 'sms';    // Provenance of the transaction record
     smsReference?: string;        // Authoritative provider reference (e.g., FT..., RA...)
     smsFingerprint?: string;      // Deterministic deduplication hash
+    isTransfer?: boolean;         // True if verified internal transfer between user's own wallets
+    transferWalletId?: string;   // Paired destination or source wallet ID
     createdAt: string;            // When was this record created?
 }
 
