@@ -141,7 +141,7 @@ export default function WalletPicker({
                                                     </Text>
                                                     {wallet.isDefault && (
                                                         <View style={styles.defaultBadge}>
-                                                            <Text style={styles.defaultBadgeText}>DEFAULT</Text>
+                                                            <Text style={styles.defaultBadgeText}>Default</Text>
                                                         </View>
                                                     )}
                                                 </View>
@@ -275,16 +275,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             color: colors.textSecondary,
         },
         defaultBadge: {
-            paddingHorizontal: 6,
-            paddingVertical: 1,
-            borderRadius: 6,
-            backgroundColor: `${colors.champagne}25`,
+            marginLeft: 4,
         },
         defaultBadgeText: {
-            fontSize: 9,
-            fontWeight: '700',
+            fontSize: 11,
+            fontWeight: '600',
             color: colors.champagne,
-            letterSpacing: 0.5,
         },
         emptyText: {
             padding: 16,

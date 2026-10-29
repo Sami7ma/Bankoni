@@ -278,7 +278,6 @@ export default function WalletsScreen() {
                                         <Text style={styles.walletName}>{item.name}</Text>
                                         {item.isDefault && item.providerId !== 'cash' && (
                                             <View style={styles.defaultBadge}>
-                                                <Star size={11} color={colors.champagne} fill={colors.champagne} />
                                                 <Text style={styles.defaultBadgeText}>Default</Text>
                                             </View>
                                         )}
@@ -319,7 +318,6 @@ export default function WalletsScreen() {
                                                 style={styles.actionBtn}
                                                 onPress={() => void setDefaultWallet(item.id)}
                                             >
-                                                <Star size={15} color={colors.champagne} />
                                                 <Text style={styles.actionBtnText}>Set Default</Text>
                                             </TouchableOpacity>
                                         )}
@@ -547,17 +545,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             color: colors.textPrimary,
         },
         defaultBadge: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 3,
-            backgroundColor: `${colors.champagne}22`,
-            paddingHorizontal: 7,
-            paddingVertical: 2,
-            borderRadius: 6,
+            marginLeft: 4,
         },
         defaultBadgeText: {
-            fontSize: 10,
-            fontWeight: '700',
+            fontSize: 11,
+            fontWeight: '600',
             color: colors.champagne,
         },
         archivedBadge: {

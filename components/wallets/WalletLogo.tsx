@@ -88,8 +88,6 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         justifyContent: 'center',
         overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.12)',
     },
     mpBadge: {
         position: 'absolute',

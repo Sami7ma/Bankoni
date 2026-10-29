@@ -110,7 +110,7 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
                 keyboardShouldPersistTaps="handled"
             >
                 {/* Provider Picker */}
-                <Text style={styles.inputLabel}>Select Financial Provider</Text>
+                <Text style={styles.inputLabel}>Financial Provider</Text>
                 <ScrollView
                     horizontal
                     showsHorizontalScrollIndicator={false}
@@ -143,7 +143,7 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
                 </ScrollView>
 
                 {/* Wallet Name */}
-                <Text style={styles.inputLabel}>Wallet Name / Label</Text>
+                <Text style={styles.inputLabel}>Account / Wallet Name</Text>
                 <TextInput
                     style={styles.textInput}
                     value={name}
@@ -164,7 +164,7 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
                 </Text>
 
                 {/* Masked identifier / last 4 digits */}
-                <Text style={styles.inputLabel}>Last 4 Digits / Masked Identifier (Optional)</Text>
+                <Text style={styles.inputLabel}>Account Number (Last 4 Digits - Optional)</Text>
                 <TextInput
                     style={styles.textInput}
                     value={accountNumberLast4}
@@ -177,7 +177,7 @@ export default function AddWalletModal({ visible, onClose }: AddWalletModalProps
 
                 {/* Default Toggle */}
                 <View style={styles.switchRow}>
-                    <Text style={styles.switchLabel}>Set as Default Wallet</Text>
+                    <Text style={styles.switchLabel}>Default Account / Wallet</Text>
                     <Switch
                         value={isDefault}
                         onValueChange={setIsDefault}
@@ -241,16 +241,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             alignItems: 'center',
             justifyContent: 'center',
             padding: 8,
-            borderRadius: 14,
-            backgroundColor: colors.surfaceAlt,
+            borderRadius: 12,
+            backgroundColor: 'transparent',
             borderWidth: 1,
-            borderColor: colors.border,
-            width: 82,
+            borderColor: 'transparent',
+            width: 76,
             gap: 6,
         },
         providerOptionSelected: {
             borderColor: colors.champagne,
-            backgroundColor: `${colors.champagne}18`,
+            backgroundColor: `${colors.champagne}10`,
         },
         providerOptionText: {
             fontSize: 11,

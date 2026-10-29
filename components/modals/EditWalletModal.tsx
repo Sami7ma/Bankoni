@@ -97,12 +97,12 @@ export default function EditWalletModal({
                 keyboardShouldPersistTaps="handled"
             >
                 {/* Wallet Name */}
-                <Text style={styles.inputLabel}>Wallet Name</Text>
+                <Text style={styles.inputLabel}>Account / Wallet Name</Text>
                 <TextInput
                     style={styles.textInput}
                     value={name}
                     onChangeText={setName}
-                    placeholder="Wallet Name"
+                    placeholder="Account Name"
                     placeholderTextColor={colors.textMuted}
                 />
 
@@ -119,7 +119,7 @@ export default function EditWalletModal({
                 </Text>
 
                 {/* Last 4 Digits */}
-                <Text style={styles.inputLabel}>Last 4 Digits / Masked Identifier (Optional)</Text>
+                <Text style={styles.inputLabel}>Account Number (Last 4 Digits - Optional)</Text>
                 <TextInput
                     style={styles.textInput}
                     value={accountNumberLast4}
@@ -132,7 +132,7 @@ export default function EditWalletModal({
 
                 {/* Default Toggle */}
                 <View style={styles.switchRow}>
-                    <Text style={styles.switchLabel}>Default Wallet</Text>
+                    <Text style={styles.switchLabel}>Default Account / Wallet</Text>
                     <Switch
                         value={isDefault}
                         onValueChange={setIsDefault}
