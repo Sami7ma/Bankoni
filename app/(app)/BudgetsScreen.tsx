@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 
-import { Text, View, StyleSheet, FlatList, Alert, } from "react-native";
+import { Text, View, StyleSheet, FlatList, Alert, Platform } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { NotebookPen } from "lucide-react-native";
@@ -13,6 +13,13 @@ import FloatingActionButton from "../../components/common/buttons/FloatingAction
 import EditBudgetModal from '../../components/modals/EditBudgetModal';
 import AddBudgetModal from '../../components/modals/AddBudgetModal';
 import { Budget } from "../../types/Budget";
+import { getTodayEthiopianDateString } from "../../utils/date";
+import {
+    filterEligibleTransactions,
+    calculateBudgetMetrics,
+    BudgetMetrics,
+} from "../../utils/financial";
+import { formatEtb } from "../../utils/format";
 
 
 export default function BudgetsScreen() {
@@ -25,67 +32,68 @@ export default function BudgetsScreen() {
 
     const budgets = useBanKoniStore((state) => state.budgets);
     const transactions = useBanKoniStore((state) => state.transactions);
+    const wallets = useBanKoniStore((state) => state.wallets);
     const categories = useBanKoniStore((state) => state.categories);
     const deleteBudget = useBanKoniStore((state) => state.deleteBudget);
     const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
 
     // LOCAL STATE
-
     const [modalVisible, setModalVisible] = useState(false);
+
+    // Current Ethiopian local calendar date (EAT UTC+3)
+    const todayStr = useMemo(() => getTodayEthiopianDateString(), []);
+
+    // Filter cleared transactions from active wallets
+    const eligibleTransactions = useMemo(
+        () => filterEligibleTransactions(transactions, wallets),
+        [transactions, wallets]
+    );
+
+    // Map each budget to its calculated metrics
+    const budgetMetricsMap = useMemo(() => {
+        const map = new Map<string, BudgetMetrics>();
+        for (const b of budgets) {
+            map.set(b.id, calculateBudgetMetrics(b, eligibleTransactions, todayStr));
+        }
+        return map;
+    }, [budgets, eligibleTransactions, todayStr]);
 
     // HELPERS
     const getCategoryById = (id: string) =>
         categories.find((cat) => cat.id === id);
 
-    // CALCULATE SPENT PER CATEGORY
-    // Calculate how much was spent inside each budget's own start and end dates.
-    // for now we use this month only
-    const getSpentForBudget = (budget: Budget) => {
-        return transactions.filter(tx => {
-            if (tx.type !== 'DEBIT') {
-                return false;
-            }
-            if (tx.categoryId !== budget.categoryId) {
-                return false;
-            }
-            if (budget.walletId && tx.walletId !== budget.walletId) {
-                return false;
-            }
-            const txDate =
-                new Date(tx.date)
-                    .toISOString()
-                    .split('T')[0];
-            return (txDate >= budget.startDate && txDate <= budget.endDate);
-        }).reduce(
-            (total, tx) => total + tx.amount,
-            0
-        );
-    };
-
-    //DELETE HANDLER 
+    // DELETE HANDLER 
     const handleDelete = (budgetId: string, categoryName: string) => {
         Alert.alert(
-            "Delete Budget", // title 
-            `Remove the budget for ${categoryName}?`, // message 
+            "Delete Budget",
+            `Remove the budget for ${categoryName}?`,
             [
                 { text: 'Cancel', style: 'cancel' },
                 {
-                    text: 'Delete', style: 'destructive',
-                    onPress: () => deleteBudget(budgetId)
-                }
+                    text: 'Delete',
+                    style: 'destructive',
+                    onPress: () => deleteBudget(budgetId),
+                },
             ]
         );
     };
 
-    //SUMMARY 
-    const totalBudgeted = budgets.reduce(
-        (sum, budget) => sum + budget.limitAmount,
-        0
+    // SUMMARY METRICS
+    const totalBudgeted = useMemo(
+        () => budgets.reduce((sum, budget) => sum + budget.limitAmount, 0),
+        [budgets]
     );
 
-    const totalSpent = budgets.reduce(
-        (sum, budget) => sum + (getSpentForBudget(budget) || 0), 0
+    const totalSpent = useMemo(
+        () =>
+            budgets.reduce((sum, budget) => {
+                const m = budgetMetricsMap.get(budget.id);
+                return sum + (m?.spent ?? 0);
+            }, 0),
+        [budgets, budgetMetricsMap]
     );
+
+    const totalRemaining = totalBudgeted - totalSpent;
 
     // UI 
     return (
@@ -103,33 +111,54 @@ export default function BudgetsScreen() {
                     onPress={() => setModalVisible(true)}
                 />
             </View>
-            {/* summary row */}
+
+            {/* SUMMARY ROW: Budgeted | Spent | Remaining */}
             {budgets.length > 0 && (
                 <View style={styles.summaryRow}>
                     <View style={styles.summaryItem}>
-                        <Text style={styles.summaryLabel}>Total Budgeted</Text>
+                        <Text style={styles.summaryLabel}>Budgeted</Text>
                         <Text style={styles.summaryValue}>
-                            ETB {totalBudgeted.toLocaleString()}
+                            {formatEtb(totalBudgeted, { decimals: 0 })}
                         </Text>
                     </View>
                     <View style={styles.summaryDivider} />
                     <View style={styles.summaryItem}>
-                        <Text style={styles.summaryLabel}>Total Spent</Text>
-                        <Text style={[
-                            styles.summaryValue,
-                            {
-                                color: totalSpent > totalBudgeted
-                                    ? colors.danger
-                                    : colors.success
-                            },
-                        ]}>
-                            ETB {totalSpent.toLocaleString()}
+                        <Text style={styles.summaryLabel}>Spent</Text>
+                        <Text
+                            style={[
+                                styles.summaryValue,
+                                {
+                                    color:
+                                        totalSpent > totalBudgeted
+                                            ? colors.danger
+                                            : colors.textPrimary,
+                                },
+                            ]}
+                        >
+                            {formatEtb(totalSpent, { decimals: 0 })}
+                        </Text>
+                    </View>
+                    <View style={styles.summaryDivider} />
+                    <View style={styles.summaryItem}>
+                        <Text style={styles.summaryLabel}>Remaining</Text>
+                        <Text
+                            style={[
+                                styles.summaryValue,
+                                {
+                                    color:
+                                        totalRemaining >= 0
+                                            ? colors.success
+                                            : colors.danger,
+                                },
+                            ]}
+                        >
+                            {formatEtb(totalRemaining, { decimals: 0 })}
                         </Text>
                     </View>
                 </View>
             )}
 
-            {/* Budger */}
+            {/* BUDGETS LIST */}
             <FlatList
                 data={budgets}
                 keyExtractor={(item) => item.id}
@@ -139,7 +168,7 @@ export default function BudgetsScreen() {
                     <BudgetCard
                         budget={item}
                         category={getCategoryById(item.categoryId)}
-                        spent={getSpentForBudget(item) || 0}
+                        metrics={budgetMetricsMap.get(item.id)}
                         onEdit={() => setEditingBudget(item)}
                         onDelete={() =>
                             handleDelete(
@@ -192,13 +221,14 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         justifyContent: "space-between",
         alignItems: "center",
         paddingHorizontal: 10,
-        paddingTop: 2,
-        paddingBottom: 12,
+        paddingTop: Platform.OS === 'ios' ? 14 : 8,
+        paddingBottom: 10,
     },
 
     headerTitle: {
         fontSize: 28,
-        fontWeight: "bold",
+        fontWeight: "700",
+        letterSpacing: 0.3,
         color: colors.textPrimary,
     },
 
@@ -213,43 +243,51 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
 
     summaryRow: {
         flexDirection: "row",
+        alignItems: "center",
         marginHorizontal: 10,
-        backgroundColor: colors.surface,
-        borderRadius: 16,
-        padding: 10,
-        marginBottom: 5,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: "transparent",
+        paddingVertical: 10,
+        paddingHorizontal: 2,
+        marginBottom: 8,
+        borderBottomWidth: StyleSheet.hairlineWidth,
+        borderBottomColor: colors.border,
     },
 
     summaryItem: {
         flex: 1,
         alignItems: "center",
+        justifyContent: "center",
         gap: 4,
     },
 
     summaryLabel: {
-        fontSize: 12,
+        fontSize: 11,
         color: colors.textSecondary,
         textTransform: "uppercase",
-        letterSpacing: 0.5,
+        letterSpacing: 0.8,
+        fontWeight: "600",
+        textAlign: "center",
     },
 
     summaryValue: {
-        fontSize: 18,
+        fontSize: 20,
         fontWeight: "700",
         color: colors.textPrimary,
+        marginTop: 2,
+        textAlign: "center",
     },
 
     summaryDivider: {
         width: 1,
+        height: 32,
+        alignSelf: "center",
         backgroundColor: colors.border,
         marginHorizontal: 12,
     },
 
     listContent: {
         paddingHorizontal: 10,
-        paddingBottom: 32,
+        paddingBottom: 90,
     },
 
     emptyState: {

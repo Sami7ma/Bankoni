@@ -2,7 +2,7 @@
 // Compact budget preview for the HomeScreen.
 // Shows up to 4 budgets as individual cards matching TransactionRow style.
 // components/home/HomeBudgetPreview.tsx
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Pencil, Trash2 } from 'lucide-react-native';
@@ -11,6 +11,9 @@ import useBanKoniStore from '../../store/useBanKoniStore';
 import EditBudgetModal from '../modals/EditBudgetModal';
 import { Budget } from '../../types/Budget';
 import CategoryIcon from '../common/icons/CategoryIcon';
+import { getTodayEthiopianDateString } from '../../utils/date';
+import { filterEligibleTransactions, calculateBudgetMetrics } from '../../utils/financial';
+import { formatEtb } from '../../utils/format';
 
 export default function HomeBudgetPreview() {
     const colors = useTheme();
@@ -26,36 +29,36 @@ export default function HomeBudgetPreview() {
     const [expandedBudgetId, setExpandedBudgetId] = useState<string | null>(null);
     const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
 
+    const todayStr = useMemo(() => getTodayEthiopianDateString(), []);
+    const eligibleTransactions = useMemo(
+        () => filterEligibleTransactions(transactions, wallets),
+        [transactions, wallets]
+    );
+
     const getCategoryById = (id: string) =>
         categories.find((cat) => cat.id === id);
 
     const getCategoryName = (id: string) =>
         getCategoryById(id)?.name ?? 'Unknown';
 
-    const getSpent = (categoryId: string, walletId?: string | null) =>
-        transactions
-            .filter((tx) => {
-                if (tx.type !== 'DEBIT' || tx.categoryId !== categoryId) return false;
-                if (walletId && tx.walletId !== walletId) return false;
-                return true;
+    const previewBudgets = useMemo(() => {
+        return budgets
+            .map((b) => {
+                const metrics = calculateBudgetMetrics(b, eligibleTransactions, todayStr);
+                const pct = metrics.percentage / 100;
+                const wallet = wallets.find((w) => w.id === b.walletId);
+                return {
+                    ...b,
+                    spent: metrics.spent,
+                    pct,
+                    name: getCategoryName(b.categoryId),
+                    walletName: wallet?.name,
+                    metrics,
+                };
             })
-            .reduce((sum, tx) => sum + tx.amount, 0);
-
-    const previewBudgets = budgets
-        .map((b) => {
-            const spent = getSpent(b.categoryId, b.walletId);
-            const pct = b.limitAmount > 0 ? spent / b.limitAmount : 0;
-            const wallet = wallets.find((w) => w.id === b.walletId);
-            return {
-                ...b,
-                spent,
-                pct,
-                name: getCategoryName(b.categoryId),
-                walletName: wallet?.name,
-            };
-        })
-        .sort((a, b) => b.pct - a.pct)
-        .slice(0, 4);
+            .sort((a, b) => b.pct - a.pct)
+            .slice(0, 4);
+    }, [budgets, eligibleTransactions, todayStr, wallets, categories]);
 
     const getBarColor = (pct: number) => {
         if (pct >= 0.8) return colors.danger;
@@ -106,20 +109,11 @@ export default function HomeBudgetPreview() {
                                 {(() => {
                                     const cat = getCategoryById(item.categoryId);
                                     return (
-                                        <View
-                                            style={[
-                                                styles.categoryIconWrap,
-                                                {
-                                                    backgroundColor: cat?.colorKey
-                                                        ? `${cat.colorKey}14`
-                                                        : `${colors.champagne}14`,
-                                                },
-                                            ]}
-                                        >
+                                        <View style={styles.categoryIconWrap}>
                                             <CategoryIcon
                                                 iconKey={cat?.iconKey}
                                                 color={cat?.colorKey ?? colors.champagne}
-                                                size={18}
+                                                size={20}
                                                 flow={cat?.flow ?? 'EXPENSE'}
                                             />
                                         </View>
@@ -130,11 +124,9 @@ export default function HomeBudgetPreview() {
                                         {item.name}
                                     </Text>
                                     {item.walletName ? (
-                                        <View style={styles.walletBadge}>
-                                            <Text style={styles.walletBadgeText} numberOfLines={1}>
-                                                {item.walletName}
-                                            </Text>
-                                        </View>
+                                        <Text style={styles.walletText} numberOfLines={1}>
+                                            • {item.walletName}
+                                        </Text>
                                     ) : null}
                                 </View>
                                 <Text style={[styles.budgetPct, { color: barColor }]}>
@@ -153,10 +145,10 @@ export default function HomeBudgetPreview() {
 
                             <View style={styles.rowBottom}>
                                 <Text style={styles.spentText}>
-                                    ETB {item.spent.toLocaleString()}
+                                    {formatEtb(item.spent, { decimals: 0 })}
                                 </Text>
                                 <Text style={styles.limitText}>
-                                    / ETB {item.limitAmount.toLocaleString()}
+                                    / {formatEtb(item.limitAmount, { decimals: 0 })}
                                 </Text>
                             </View>
                         </TouchableOpacity>
@@ -220,15 +212,15 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             fontWeight: '500',
         },
         row: {
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            padding: 14,
-            marginBottom: 8,
-            borderWidth: 1,
-            borderColor: 'transparent',
+            backgroundColor: 'transparent',
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+            paddingVertical: 12,
+            paddingHorizontal: 6,
+            overflow: 'hidden',
         },
         rowExpanded: {
-            borderColor: colors.border,
+            backgroundColor: `${colors.surface}50`,
         },
         rowTop: {
             flexDirection: 'row',
@@ -236,17 +228,16 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             marginBottom: 8,
         },
         categoryIconWrap: {
-            width: 38,
-            height: 38,
-            borderRadius: 12,
+            width: 28,
+            height: 28,
             alignItems: 'center',
             justifyContent: 'center',
-            marginRight: 10,
+            marginRight: 8,
         },
         titleRow: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
+            gap: 6,
             flex: 1,
             marginRight: 8,
         },
@@ -255,19 +246,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             fontWeight: '600',
             color: colors.textPrimary,
         },
-        walletBadge: {
-            paddingHorizontal: 6,
-            paddingVertical: 1.5,
-            borderRadius: 6,
-            backgroundColor: colors.surfaceAlt,
-            borderWidth: 1,
-            borderColor: colors.border,
-        },
-        walletBadgeText: {
-            fontSize: 10,
-            fontWeight: '600',
-            color: colors.champagne,
-            letterSpacing: 0.3,
+        walletText: {
+            fontSize: 12,
+            color: colors.textSecondary,
         },
         budgetPct: {
             fontSize: 13,
@@ -303,9 +284,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             justifyContent: 'flex-end',
             alignItems: 'center',
             gap: 12,
-            marginTop: 10,
+            marginTop: 8,
             paddingTop: 8,
-            borderTopWidth: 1,
+            paddingBottom: 4,
+            paddingHorizontal: 6,
+            borderTopWidth: StyleSheet.hairlineWidth,
             borderTopColor: colors.border,
         },
         actionBtn: {
