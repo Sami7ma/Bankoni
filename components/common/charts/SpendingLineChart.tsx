@@ -42,16 +42,8 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
         );
     }
 
-    // Dynamic width calculation so the curve extends cleanly to the right side of the card,
-    // eliminating dead space, while paddingLeftOffset gives generous room on the left
-    // so "ETB" labels never touch or crowd the left card border.
-    const numPoints = Math.max(labels.length, 1);
-    const cardInnerWidth = SCREEN_WIDTH - 20; // 10px padding on screen edges
-    const paddingLeftOffset = 90; // Left margin for Y-axis labels (keeps ETB 30px away from border)
-    const targetRight = cardInnerWidth - 28; // Where the last point should land
-    const chartWidth = numPoints > 1
-        ? paddingLeftOffset + (targetRight - paddingLeftOffset) * (numPoints / (numPoints - 1))
-        : cardInnerWidth;
+    // Full width between screen margins (10px padding on each side of the screen)
+    const chartWidth = SCREEN_WIDTH - 20;
 
     return (
         <View style={styles.container}>
@@ -61,10 +53,10 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
                     datasets: [{ data: values }],
                 }}
                 width={chartWidth}
-                height={210}
+                height={200}
                 yAxisLabel="ETB "
                 yAxisSuffix=""
-                yLabelsOffset={8}
+                yLabelsOffset={12}
                 formatYLabel={formatYValue}
                 withDots={true}              // show dots on data points
                 withInnerLines={false}       // hide horizontal grid lines
@@ -75,22 +67,24 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
                 bezier                       // smooth curved line (not jagged)
                 chartConfig={{
                     // BACKGROUND
-                    backgroundColor: colors.surface,
-                    backgroundGradientFrom: colors.surface,
-                    backgroundGradientTo: colors.surface,
+                    backgroundColor: 'transparent',
+                    backgroundGradientFrom: colors.background,
+                    backgroundGradientFromOpacity: 0,
+                    backgroundGradientTo: colors.background,
+                    backgroundGradientToOpacity: 0,
                     decimalPlaces: 0,
                     // LINE + DOTS
                     color: () => colors.champagne,           // line color (gold)
                     // FILL UNDER THE LINE
                     fillShadowGradientFrom: colors.champagne,
-                    fillShadowGradientFromOpacity: 0.3,      // semi-transparent
+                    fillShadowGradientFromOpacity: 0.25,     // semi-transparent
                     fillShadowGradientTo: colors.champagne,
                     fillShadowGradientToOpacity: 0.0,        // fades to invisible
                     // LABELS (text on axes)
-                    labelColor: () => colors.textPrimary,
+                    labelColor: () => colors.textSecondary,
                     propsForLabels: {
-                        fontSize: 12,
-                        fontWeight: '700',
+                        fontSize: 11,
+                        fontWeight: '600',
                     },
                     // DECORATION
                     propsForDots: {
@@ -108,25 +102,17 @@ export default function SpendingLineChart({ labels, values }: SpendingLineChartP
 // styles
 const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create({
     container: {
-        backgroundColor: colors.surface,
-        borderRadius: 16,
-        paddingTop: 16,
-        paddingBottom: 14,
-        borderWidth: 1,
-        borderColor: colors.border,
+        backgroundColor: 'transparent',
+        paddingVertical: 4,
+        alignItems: 'center',
         overflow: 'hidden',
-        alignItems: 'flex-start',
     },
     chart: {
-        borderRadius: 12,
-        paddingRight: 90, // Sets react-native-chart-kit left plot offset
+        borderRadius: 0,
     },
     emptyContainer: {
-        backgroundColor: colors.surface,
-        borderRadius: 16,
+        backgroundColor: 'transparent',
         padding: 32,
-        borderWidth: 1,
-        borderColor: colors.border,
         alignItems: 'center',
         gap: 8,
     },

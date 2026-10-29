@@ -12,6 +12,7 @@
 
 import { View, Text, StyleSheet } from 'react-native';
 import useTheme from '../../../hooks/useTheme';
+import { formatEtb } from '../../../utils/format';
 
 // ── TYPES ────────────────────────────────────────────────
 // Each item in the list represents one category's spending.
@@ -56,7 +57,7 @@ export default function TopSpendingList({ data }: TopSpendingListProps) {
                     {/* RIGHT SIDE: amount + percentage */}
                     <View style={styles.right}>
                         <Text style={styles.amount}>
-                            ETB {cat.amount.toLocaleString()}
+                            {formatEtb(cat.amount)}
                         </Text>
                         <Text style={styles.percent}>
                             {cat.percentage}%
@@ -79,21 +80,18 @@ export default function TopSpendingList({ data }: TopSpendingListProps) {
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
     StyleSheet.create({
         card: {
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: colors.border,
+            backgroundColor: 'transparent',
             overflow: 'hidden',
         },
         row: {
             flexDirection: 'row',
             justifyContent: 'space-between',
             alignItems: 'center',
-            paddingVertical: 14,
-            paddingHorizontal: 10,
+            paddingVertical: 13,
+            paddingHorizontal: 2,
         },
         rowBorder: {
-            borderBottomWidth: 1,
+            borderBottomWidth: StyleSheet.hairlineWidth,
             borderBottomColor: colors.border,
         },
         left: {
