@@ -16,6 +16,11 @@ import AddTransactionModal from '../../components/modals/AddTransactionModal';
 import EditTransactionModal from '../../components/modals/EditTransactionModal';
 import SmsImportModal from '../../components/modals/SmsImportModal';
 import { Transaction } from '../../types/Transaction';
+import {
+    getEthiopianDateString,
+    getTodayEthiopianDateString,
+    formatEthiopianDate,
+} from '../../utils/date';
 
 export default function TransactionScreen() {
     // theme
@@ -56,14 +61,7 @@ export default function TransactionScreen() {
     // show transarin form every dates
     const [selectedDate, setSelectedDate] = useState<string | null>(null);
     // date formatter
-    const formatSelectedDate = (date: string) => {
-        const parsedDate = new Date(`${date}T00:00:00`);
-        return parsedDate.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-        });
-    };
+    const formatSelectedDate = (date: string) => formatEthiopianDate(date);
 
     // helper to find category bu ID like the ones in home screen
     const getCategoryById = (id: string) => categories.find((cat) => cat.id === id);
@@ -91,8 +89,7 @@ export default function TransactionScreen() {
         // Step 3: Group by date
         if (selectedDate) {
             filtered = filtered.filter((tx) => {
-                const transactionDate = new Date(tx.date);
-                const transactionDateKey = transactionDate.toISOString().split('T')[0];
+                const transactionDateKey = getEthiopianDateString(tx.date);
                 return transactionDateKey === selectedDate;
             });
         }
@@ -301,7 +298,7 @@ export default function TransactionScreen() {
                             </View>
                             <Calendar current={
                                 selectedDate ??
-                                new Date().toISOString().split('T')[0]
+                                getTodayEthiopianDateString()
                             }
                                 markedDates={markedDates}
                                 onDayPress={(day) => {

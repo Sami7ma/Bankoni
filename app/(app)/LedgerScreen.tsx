@@ -4,9 +4,10 @@
 // Combines Wallets (Accounts) and Transaction History into a single screen
 // with a sleek top segmented tab switch.
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
     Alert,
+    Animated,
     FlatList,
     Modal,
     StyleSheet,
@@ -14,7 +15,9 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    Platform,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import {
@@ -41,6 +44,7 @@ import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 import { Wallet } from '../../types/Wallet';
 import { Transaction } from '../../types/Transaction';
+import { getEthiopianDateString, formatEthiopianDate } from '../../utils/date';
 import { getWalletProvider } from '../../constants/walletProviders';
 import WalletLogo from '../../components/wallets/WalletLogo';
 import TransactionRow from '../../components/home/TransactionRow';
@@ -73,6 +77,19 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
             setActiveTab(route?.params?.initialTab);
         }
     }, [route?.params?.initialTab]);
+
+    const isDark = colors.statusBar === 'light';
+    const [segmentWidth, setSegmentWidth] = useState(0);
+    const segmentAnim = useRef(new Animated.Value(activeTab === 'wallets' ? 0 : 1)).current;
+
+    useEffect(() => {
+        Animated.spring(segmentAnim, {
+            toValue: activeTab === 'wallets' ? 0 : 1,
+            tension: 70,
+            friction: 10,
+            useNativeDriver: true,
+        }).start();
+    }, [activeTab]);
 
     // Zustand Store
     const wallets = useBanKoniStore((state) => state.wallets);
@@ -119,7 +136,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
     ) => {
         const cleanName = newName.trim();
         if (!cleanName) {
-            Alert.alert('Name Required', 'Wallet name cannot be empty.');
+            Alert.alert('Name Required', 'Account name cannot be empty.');
             return;
         }
 
@@ -142,7 +159,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
 
             setEditingWallet(null);
         } catch (err) {
-            Alert.alert('Error', err instanceof Error ? err.message : 'Could not update wallet.');
+            Alert.alert('Error', err instanceof Error ? err.message : 'Could not update account.');
         }
     };
 
@@ -154,7 +171,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                 setSelectedWalletId(null);
             }
         } catch (err) {
-            Alert.alert('Error', err instanceof Error ? err.message : 'Could not archive wallet.');
+            Alert.alert('Error', err instanceof Error ? err.message : 'Could not archive account.');
         }
     };
 
@@ -162,18 +179,18 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
         const hasTransactions = transactions.some((t) => t.walletId === wallet.id);
         if (hasTransactions) {
             Alert.alert(
-                'Wallet Has Transactions',
-                'This wallet has transactions recorded. Archiving it preserves your financial history while hiding it from active lists. Do you want to archive it instead?',
+                'Account Has Transactions',
+                'This account has transactions recorded. Archiving it preserves your financial history while hiding it from active lists. Do you want to archive it instead?',
                 [
                     { text: 'Cancel', style: 'cancel' },
-                    { text: 'Archive Wallet', onPress: () => handleToggleArchive(wallet) },
+                    { text: 'Archive Account', onPress: () => handleToggleArchive(wallet) },
                 ]
             );
             return;
         }
 
         Alert.alert(
-            'Delete Wallet',
+            'Delete Account',
             `Are you sure you want to delete "${wallet.name}"? This action cannot be undone.`,
             [
                 { text: 'Cancel', style: 'cancel' },
@@ -208,14 +225,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
 
     const getCategoryById = (id: string) => categories.find((cat) => cat.id === id);
 
-    const formatSelectedDate = (date: string) => {
-        const parsedDate = new Date(`${date}T00:00:00`);
-        return parsedDate.toLocaleDateString('en-US', {
-            month: 'short',
-            day: 'numeric',
-            year: 'numeric',
-        });
-    };
+    const formatSelectedDate = (date: string) => formatEthiopianDate(date);
 
     const filteredTransactions = useMemo(() => {
         let filtered = transactions;
@@ -233,8 +243,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
         }
         if (selectedDate) {
             filtered = filtered.filter((tx) => {
-                const txDate = new Date(tx.date);
-                const txDateKey = txDate.toISOString().split('T')[0];
+                const txDateKey = getEthiopianDateString(tx.date);
                 return txDateKey === selectedDate;
             });
         }
@@ -272,7 +281,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
             {/* HEADER */}
             <View style={styles.header}>
                 <View style={styles.headerText}>
-                    <Text style={styles.headerTitle}>Ledger</Text>
+                    <Text style={styles.headerTitle}>Wallets</Text>
                     <Text style={styles.headerSubtitle}>
                         {activeTab === 'wallets'
                             ? 'Accounts, cash & mobile money balances'
@@ -302,20 +311,61 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                             }
                         }}
                         activeOpacity={0.8}
-                        accessibilityLabel={activeTab === 'wallets' ? 'Add Wallet' : 'Add Transaction'}
+                        accessibilityLabel={activeTab === 'wallets' ? 'Add Account' : 'Add Transaction'}
                     >
                         <Plus size={20} color={colors.background} />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            {/* SEGMENTED SWITCH */}
+            {/* LIQUID GLASS SEGMENTED SWITCH */}
             <View style={styles.segmentWrapper}>
-                <View style={styles.segmentContainer}>
+                <View
+                    style={styles.segmentContainer}
+                    onLayout={(e) => {
+                        const w = e.nativeEvent.layout.width;
+                        if (w && Math.abs(w - segmentWidth) > 1) {
+                            setSegmentWidth(w);
+                        }
+                    }}
+                >
+                    {/* Animated Liquid Glass Bubble */}
+                    {segmentWidth > 0 && (
+                        <Animated.View
+                            style={[
+                                styles.segmentBubble,
+                                {
+                                    width: Math.max((segmentWidth - 6) / 2, 0),
+                                    transform: [
+                                        {
+                                            translateX: segmentAnim.interpolate({
+                                                inputRange: [0, 1],
+                                                outputRange: [0, (segmentWidth - 6) / 2],
+                                            }),
+                                        },
+                                    ],
+                                },
+                            ]}
+                            pointerEvents="none"
+                        >
+                            <LinearGradient
+                                colors={
+                                    isDark
+                                        ? ['rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0.06)']
+                                        : ['rgba(255, 255, 255, 0.96)', 'rgba(255, 255, 255, 0.85)']
+                                }
+                                start={{ x: 0, y: 0 }}
+                                end={{ x: 1, y: 1 }}
+                                style={StyleSheet.absoluteFill}
+                            />
+                            <View style={styles.segmentBubbleSheen} />
+                        </Animated.View>
+                    )}
+
                     <TouchableOpacity
-                        style={[styles.segmentBtn, activeTab === 'wallets' && styles.segmentBtnActive]}
+                        style={styles.segmentBtn}
                         onPress={() => setActiveTab('wallets')}
-                        activeOpacity={0.85}
+                        activeOpacity={0.8}
                     >
                         <WalletCards
                             size={16}
@@ -327,14 +377,14 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                                 activeTab === 'wallets' && styles.segmentBtnTextActive,
                             ]}
                         >
-                            Wallets ({activeWallets.length})
+                            Accounts ({activeWallets.length})
                         </Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
-                        style={[styles.segmentBtn, activeTab === 'transactions' && styles.segmentBtnActive]}
+                        style={styles.segmentBtn}
                         onPress={() => setActiveTab('transactions')}
-                        activeOpacity={0.85}
+                        activeOpacity={0.8}
                     >
                         <ArrowLeftRight
                             size={16}
@@ -368,7 +418,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                                     <View>
                                         <Text style={styles.summaryLabel}>Total Active Balance</Text>
                                         <Text style={styles.summaryAmount}>
-                                            ETB{' '}
+                                            <Text style={styles.summaryCurrency}>ETB </Text>
                                             {totalActiveBalance.toLocaleString('en-US', {
                                                 minimumFractionDigits: 2,
                                                 maximumFractionDigits: 2,
@@ -378,7 +428,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                                     <View style={styles.walletCountBadge}>
                                         <WalletCards size={18} color={colors.champagne} />
                                         <Text style={styles.walletCountText}>
-                                            {activeWallets.length} {activeWallets.length === 1 ? 'Wallet' : 'Wallets'}
+                                            {activeWallets.length} {activeWallets.length === 1 ? 'Account' : 'Accounts'}
                                         </Text>
                                     </View>
                                 </View>
@@ -435,7 +485,6 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                                             <Text style={styles.walletName}>{item.name}</Text>
                                             {item.isDefault && (
                                                 <View style={styles.defaultBadge}>
-                                                    <Star size={10} color={colors.champagne} fill={colors.champagne} />
                                                     <Text style={styles.defaultBadgeText}>Default</Text>
                                                 </View>
                                             )}
@@ -477,7 +526,6 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                                                     style={styles.actionBtn}
                                                     onPress={() => setDefaultWallet(item.id)}
                                                 >
-                                                    <Star size={14} color={colors.champagne} />
                                                     <Text style={styles.actionBtnText}>Set Default</Text>
                                                 </TouchableOpacity>
                                             )}
@@ -563,11 +611,11 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                         <View style={styles.emptyContainer}>
                             <WalletCards size={48} color={colors.textSecondary} />
                             <Text style={styles.emptyTitle}>
-                                {showArchived ? 'No Archived Wallets' : 'No Wallets Found'}
+                                {showArchived ? 'No Archived Accounts' : 'No Accounts Found'}
                             </Text>
                             <Text style={styles.emptySubtitle}>
                                 {showArchived
-                                    ? 'Wallets you archive will appear here.'
+                                    ? 'Accounts you archive will appear here.'
                                     : 'Add your cash, Ethiopian banks, or mobile money accounts.'}
                             </Text>
                         </View>
@@ -631,9 +679,8 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                                     style={[
                                         styles.filterPill,
                                         active && {
-                                            backgroundColor: colors.champagne + '20',
-                                            borderWidth: 1,
-                                            borderColor: colors.champagne,
+                                            backgroundColor: colors.surfaceAlt,
+                                            borderColor: colors.border,
                                         },
                                     ]}
                                     onPress={() => setFilter(type)}
@@ -642,7 +689,7 @@ export default function LedgerScreen({ route }: LedgerScreenProps) {
                                     <Text
                                         style={[
                                             styles.filterPillText,
-                                            active && { color: colors.champagne, fontWeight: '700' },
+                                            active && { color: colors.textPrimary, fontWeight: '700' },
                                         ]}
                                     >
                                         {label}
@@ -763,21 +810,21 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'space-between',
-            paddingHorizontal: 20,
-            paddingTop: 12,
-            paddingBottom: 8,
+            paddingHorizontal: 10,
+            paddingTop: Platform.OS === 'ios' ? 14 : 8,
+            paddingBottom: 10,
         },
         headerText: {
             flex: 1,
         },
         headerTitle: {
-            fontSize: 26,
+            fontSize: 28,
             fontWeight: '700',
             color: colors.textPrimary,
             letterSpacing: 0.3,
         },
         headerSubtitle: {
-            fontSize: 12,
+            fontSize: 13,
             color: colors.textSecondary,
             marginTop: 2,
         },
@@ -810,37 +857,57 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             borderColor: colors.border,
         },
         segmentWrapper: {
-            paddingHorizontal: 20,
-            marginTop: 8,
-            marginBottom: 12,
+            paddingHorizontal: 10,
+            marginTop: 2,
+            marginBottom: 10,
         },
         segmentContainer: {
             flexDirection: 'row',
-            backgroundColor: colors.surfaceAlt,
-            borderRadius: 14,
-            padding: 4,
+            height: 44,
+            borderRadius: 22,
+            padding: 3,
+            backgroundColor: colors.statusBar === 'light' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.04)',
             borderWidth: 1,
-            borderColor: colors.border,
+            borderColor: colors.statusBar === 'light' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+            overflow: 'hidden',
+            position: 'relative',
+        },
+        segmentBubble: {
+            position: 'absolute',
+            top: 3,
+            bottom: 3,
+            left: 3,
+            borderRadius: 19,
+            borderWidth: 1,
+            borderColor: colors.statusBar === 'light' ? 'rgba(255, 255, 255, 0.20)' : 'rgba(0, 0, 0, 0.08)',
+            overflow: 'hidden',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 2 },
+            shadowOpacity: colors.statusBar === 'light' ? 0.25 : 0.08,
+            shadowRadius: 4,
+            elevation: 2,
+        },
+        segmentBubbleSheen: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '46%',
+            borderTopLeftRadius: 19,
+            borderTopRightRadius: 19,
+            backgroundColor: colors.statusBar === 'light' ? 'rgba(255, 255, 255, 0.08)' : 'rgba(255, 255, 255, 0.40)',
         },
         segmentBtn: {
             flex: 1,
             flexDirection: 'row',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 8,
-            paddingVertical: 9,
-            borderRadius: 10,
+            gap: 7,
+            height: '100%',
+            borderRadius: 19,
+            zIndex: 2,
         },
-        segmentBtnActive: {
-            backgroundColor: colors.surface,
-            borderWidth: 1,
-            borderColor: `${colors.champagne}40`,
-            shadowColor: '#000',
-            shadowOffset: { width: 0, height: 2 },
-            shadowOpacity: 0.1,
-            shadowRadius: 3,
-            elevation: 2,
-        },
+        segmentBtnActive: {},
         segmentBtnText: {
             fontSize: 13,
             fontWeight: '600',
@@ -853,18 +920,19 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
 
         // Wallets View Styles
         walletsListContent: {
-            paddingHorizontal: 20,
-            paddingBottom: 40,
+            paddingHorizontal: 10,
+            paddingBottom: 90,
         },
         walletsHeaderComponent: {
-            marginBottom: 14,
+            marginBottom: 6,
         },
         summaryCard: {
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            padding: 16,
-            borderWidth: 1,
-            borderColor: colors.border,
+            backgroundColor: 'transparent',
+            paddingVertical: 10,
+            paddingHorizontal: 2,
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+            marginBottom: 6,
         },
         summaryRow: {
             flexDirection: 'row',
@@ -872,28 +940,27 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             alignItems: 'center',
         },
         summaryLabel: {
-            fontSize: 12,
+            fontSize: 11,
             color: colors.textSecondary,
             textTransform: 'uppercase',
-            letterSpacing: 0.5,
+            letterSpacing: 0.8,
             fontWeight: '600',
         },
         summaryAmount: {
-            fontSize: 22,
+            fontSize: 24,
             fontWeight: '700',
             color: colors.champagne,
             marginTop: 4,
+        },
+        summaryCurrency: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.champagne,
         },
         walletCountBadge: {
             flexDirection: 'row',
             alignItems: 'center',
             gap: 6,
-            backgroundColor: `${colors.champagne}15`,
-            paddingHorizontal: 10,
-            paddingVertical: 6,
-            borderRadius: 12,
-            borderWidth: 1,
-            borderColor: `${colors.champagne}30`,
         },
         walletCountText: {
             fontSize: 12,
@@ -930,20 +997,17 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             fontWeight: '600',
         },
         walletCard: {
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            borderWidth: 1,
-            borderColor: colors.border,
-            marginBottom: 12,
+            backgroundColor: 'transparent',
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
             overflow: 'hidden',
         },
-        defaultWalletCard: {
-            borderColor: `${colors.champagne}60`,
-        },
+        defaultWalletCard: {},
         walletCardHeader: {
             flexDirection: 'row',
             alignItems: 'center',
-            padding: 14,
+            paddingVertical: 14,
+            paddingHorizontal: 2,
             gap: 12,
         },
         walletMainInfo: {
@@ -960,19 +1024,12 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             color: colors.textPrimary,
         },
         defaultBadge: {
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 3,
-            backgroundColor: `${colors.champagne}20`,
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 6,
+            marginLeft: 4,
         },
         defaultBadgeText: {
-            fontSize: 9,
-            fontWeight: '700',
+            fontSize: 11,
+            fontWeight: '600',
             color: colors.champagne,
-            textTransform: 'uppercase',
         },
         walletProviderName: {
             fontSize: 12,
@@ -1070,8 +1127,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             flexDirection: 'row',
             alignItems: 'center',
             backgroundColor: colors.surface,
-            marginHorizontal: 20,
-            marginBottom: 10,
+            marginHorizontal: 10,
+            marginBottom: 8,
             paddingHorizontal: 12,
             paddingVertical: 8,
             borderRadius: 12,
@@ -1087,8 +1144,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         dateRow: {
             flexDirection: 'row',
             alignItems: 'center',
-            paddingHorizontal: 20,
-            marginBottom: 10,
+            paddingHorizontal: 10,
+            marginBottom: 8,
             gap: 8,
         },
         dateButton: {
@@ -1120,8 +1177,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         },
         filterRow: {
             flexDirection: 'row',
-            paddingHorizontal: 20,
-            marginBottom: 12,
+            paddingHorizontal: 10,
+            marginBottom: 10,
             gap: 8,
         },
         filterPill: {
@@ -1138,8 +1195,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             fontWeight: '600',
         },
         transactionsListContent: {
-            paddingHorizontal: 20,
-            paddingBottom: 40,
+            paddingHorizontal: 10,
+            paddingBottom: 90,
         },
 
         // Empty States
