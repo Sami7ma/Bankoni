@@ -20,7 +20,7 @@ export default function HomeRecentTransactions() {
     const categories = useBanKoniStore((state) => state.categories);
     const deleteTransaction = useBanKoniStore((state) => state.deleteTransaction);
     const [editingTx, setEditingTx] = useState<Transaction | null>(null);
-    const recentTransactions = transactions.slice(0, 7);
+    const recentTransactions = transactions.slice(0, 5);
     const getCategoryById = (id: string) =>
         categories.find((cat) => cat.id === id);
     const handleDelete = (tx: Transaction) => {

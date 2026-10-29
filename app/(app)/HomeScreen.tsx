@@ -1,6 +1,6 @@
 // app/(app)/HomeScreen.tsx
 // The main dashboard — the first screen users see after logging in.
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import useTheme from '../../hooks/useTheme';
@@ -45,9 +45,7 @@ export default function HomeScreen() {
                 {/* HEADER */}
                 <View style={styles.header}>
                     <View>
-                        <Text style={styles.greeting}>
-                            <Text style={styles.userName}> {firstName}</Text>
-                        </Text>
+                        <Text style={styles.userName}>{firstName}</Text>
                     </View>
 
                     {/* Actions: Padlock Logout */}
@@ -87,19 +85,19 @@ export default function HomeScreen() {
                 showsVerticalScrollIndicator={false}
                 contentContainerStyle={styles.scrollContent}>
 
-                {/* Spending this month chart */}
-                <View style={{ marginTop: 10 }}>
-                    <HomeSpendingChart />
+                {/* Recent Transactions */}
+                <View style={{ marginTop: 8 }}>
+                    <HomeRecentTransactions />
                 </View>
 
                 {/* Budgets */}
-                <View style={{ marginTop: 10 }}>
+                <View style={{ marginTop: 12 }}>
                     <HomeBudgetPreview />
                 </View>
 
-                {/* Recent Transactions */}
-                <View style={{ marginTop: 10 }}>
-                    <HomeRecentTransactions />
+                {/* Spending this month chart */}
+                <View style={{ marginTop: 12 }}>
+                    <HomeSpendingChart />
                 </View>
 
             </ScrollView>
@@ -132,6 +130,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
     },
     scrollContent: {
         paddingHorizontal: 10,
+        paddingBottom: 90,
     },
     header: {
         flexDirection: 'row',
@@ -152,8 +151,9 @@ const createStyles = (colors: ReturnType<typeof useTheme>) => StyleSheet.create(
         marginBottom: 1
     },
     userName: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: colors.textPrimary
+        fontSize: 22,
+        fontWeight: '700',
+        letterSpacing: 0.4,
+        color: colors.textPrimary,
     },
 });

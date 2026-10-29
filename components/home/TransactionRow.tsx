@@ -70,22 +70,11 @@ export default function TransactionRow({
                 }}
                 activeOpacity={0.8}
             >
-                <View
-                    style={[
-                        styles.categoryIconWrap,
-                        {
-                            backgroundColor: category?.colorKey
-                                ? `${category.colorKey}14`
-                                : isIncome
-                                ? `${colors.success}14`
-                                : `${colors.champagne}14`,
-                        },
-                    ]}
-                >
+                <View style={styles.categoryIconWrap}>
                     <CategoryIcon
                         iconKey={category?.iconKey}
                         color={category?.colorKey ?? (isIncome ? colors.success : colors.champagne)}
-                        size={20}
+                        size={22}
                         flow={category?.flow ?? (isIncome ? 'INCOME' : 'EXPENSE')}
                     />
                 </View>
@@ -96,11 +85,9 @@ export default function TransactionRow({
                             {category?.name ?? 'Uncategorized'}
                         </Text>
                         {wallet ? (
-                            <View style={styles.walletBadge}>
-                                <Text style={styles.walletBadgeText} numberOfLines={1}>
-                                    {wallet.name}
-                                </Text>
-                            </View>
+                            <Text style={styles.walletText} numberOfLines={1}>
+                                • {wallet.name}
+                            </Text>
                         ) : null}
                     </View>
                     <Text style={styles.meta} numberOfLines={1}>
@@ -149,29 +136,26 @@ export default function TransactionRow({
 const createStyles = (colors: ReturnType<typeof useTheme>) =>
     StyleSheet.create({
         wrapper: {
-            backgroundColor: colors.surface,
-            borderRadius: 16,
-            marginBottom: 8,
-            borderWidth: 1,
-            borderColor: 'transparent',
+            backgroundColor: 'transparent',
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
             overflow: 'hidden',
         },
         wrapperExpanded: {
-            borderColor: colors.border,
+            backgroundColor: `${colors.surface}50`,
         },
         row: {
             flexDirection: 'row',
             alignItems: 'center',
-            paddingVertical: 13,
-            paddingHorizontal: 14,
+            paddingVertical: 12,
+            paddingHorizontal: 6,
         },
         categoryIconWrap: {
-            width: 42,
-            height: 42,
-            borderRadius: 13,
+            width: 30,
+            height: 30,
             alignItems: 'center',
             justifyContent: 'center',
-            marginRight: 12,
+            marginRight: 10,
         },
         info: {
             flex: 1,
@@ -180,7 +164,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         titleRow: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
+            gap: 6,
             marginBottom: 3,
         },
         categoryName: {
@@ -189,19 +173,10 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             color: colors.textPrimary,
             flexShrink: 1,
         },
-        walletBadge: {
-            paddingHorizontal: 6,
-            paddingVertical: 1.5,
-            borderRadius: 6,
-            backgroundColor: colors.surfaceAlt,
-            borderWidth: 1,
-            borderColor: colors.border,
-        },
-        walletBadgeText: {
-            fontSize: 10,
-            fontWeight: '600',
-            color: colors.champagne,
-            letterSpacing: 0.3,
+        walletText: {
+            fontSize: 12,
+            color: colors.textSecondary,
+            flexShrink: 1,
         },
         meta: {
             fontSize: 12,

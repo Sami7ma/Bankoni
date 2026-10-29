@@ -53,7 +53,7 @@ interface SmsImportModalProps {
 }
 
 const PROVIDER_OPTIONS: Array<{ id: SmsProviderId | 'auto'; label: string }> = [
-    { id: 'auto', label: 'Auto-Detect' },
+    { id: 'auto', label: 'Auto' },
     { id: 'cbe', label: 'CBE' },
     { id: 'dashen', label: 'Dashen' },
     { id: 'telebirr', label: 'Telebirr' },
@@ -731,36 +731,27 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         providerTab: {
             flexDirection: 'row',
             alignItems: 'center',
-            gap: 8,
-            paddingVertical: 7,
-            paddingHorizontal: 12,
-            borderRadius: 10,
-            backgroundColor: colors.surfaceAlt,
-            borderWidth: 1.5,
-            borderColor: colors.border,
+            gap: 6,
+            paddingVertical: 6,
+            paddingHorizontal: 8,
+            borderRadius: 8,
+            backgroundColor: 'transparent',
+            borderBottomWidth: 2,
+            borderBottomColor: 'transparent',
         },
         providerTabActive: {
-            backgroundColor: `${colors.champagne}18`,
-            borderColor: colors.champagne,
+            borderBottomColor: colors.champagne,
         },
         providerAutoBadge: {
-            width: 22,
-            height: 22,
-            borderRadius: 6,
-            backgroundColor: colors.surface,
             alignItems: 'center',
             justifyContent: 'center',
         },
-        providerAutoBadgeActive: {
-            backgroundColor: `${colors.champagne}25`,
-        },
-        providerLogo: {
-            borderRadius: 6,
-        },
+        providerAutoBadgeActive: {},
+        providerLogo: {},
         providerTabText: {
             color: colors.textSecondary,
-            fontSize: 12,
-            fontWeight: '600',
+            fontSize: 13,
+            fontWeight: '500',
         },
         providerTabTextActive: {
             color: colors.champagne,
