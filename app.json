@@ -4,20 +4,15 @@
     "slug": "bankoni",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/BankoniDrawerNObaground.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "splash": {
-      "image": "./assets/BankoniDrawerNObaground.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.sami7ma.bankoni"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/BankoniDrawerNObaground.png",
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#ffffff"
       },
       "predictiveBackGestureEnabled": false,
