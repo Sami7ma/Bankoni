@@ -4,8 +4,8 @@
 
 **A local-first personal finance tracker for Android and iOS**
 
-[![Expo](https://img.shields.io/badge/Expo-SDK%2057-000020?style=flat-square&logo=expo)](https://expo.dev)
-[![React Native](https://img.shields.io/badge/React%20Native-0.86-61DAFB?style=flat-square&logo=react)](https://reactnative.dev)
+[![Expo](https://img.shields.io/badge/Expo-SDK%2058-000020?style=flat-square&logo=expo)](https://expo.dev)
+[![React Native](https://img.shields.io/badge/React%20Native-0.88-61DAFB?style=flat-square&logo=react)](https://reactnative.dev)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![License](https://img.shields.io/badge/license-see%20LICENSE-lightgrey?style=flat-square)](#license)
 
@@ -102,12 +102,57 @@ For APK builds with EAS, see [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md). For a
 
 ## Tech Stack
 
-- **Framework:** Expo SDK 57, React Native 0.86, React 19
-- **Language:** TypeScript
-- **Navigation:** React Navigation
+- **Framework:** Expo SDK 58, React Native 0.88, React 19.3.0
+- **Language:** TypeScript 6
+- **Navigation:** React Navigation v7
 - **State management:** Zustand
 - **Storage and security:** expo-sqlite, expo-secure-store, expo-local-authentication
-- **UI:** react-native-svg
+- **UI:** react-native-svg, react-native-reanimated, react-native-safe-area-context
+
+## Expo SDK 58 & iOS 27 Migration
+
+BanKoni was upgraded from Expo SDK 57 (React Native 0.86.3, React 19.2.3) to **Expo SDK 58** (React Native 0.88.0, React 19.3.0) for full compatibility with **iOS 27**.
+
+### Why SDK 58 for iOS 27?
+- **UIKit Scene-Based Life Cycle:** iOS 27 requires the scene-based application lifecycle (`SceneDelegate.swift` and `UIApplicationSceneManifest` in `Info.plist`). Expo SDK 58 Continuous Native Generation (CNG) adopts scene lifecycle management natively.
+- **Scene-Aware Geometry:** Deprecates reading geometry from `UIScreen.main` in favor of scene-aware window dimensions, supporting resizable windows and split views.
+- **Safe Area Insets:** Updated `react-native-safe-area-context` (~5.10.1) handles iOS 27 insets and edge rails.
+
+### Updated Dependencies
+All Expo-managed packages were aligned using `expo install --fix`:
+- `expo`: `^58.0.0`
+- `react-native`: `0.88.0`
+- `react`: `19.3.0`
+- `react-native-safe-area-context`: `~5.10.1`
+- `react-native-screens`: `~4.30.0`
+- `react-native-gesture-handler`: `~3.3.0`
+- `react-native-reanimated`: `4.7.1`
+- `react-native-svg`: `15.16.0`
+- `react-native-worklets`: `0.13.0`
+- `expo-sqlite`: `~58.0.14`
+- `expo-crypto`, `expo-document-picker`, `expo-file-system`, `expo-font`, `expo-linear-gradient`, `expo-local-authentication`, `expo-secure-store`, `expo-sharing`, `expo-splash-screen`, `expo-status-bar`
+- Development dependencies: `expo-doctor@^1.21.5`, `@types/react@~19.3.0`
+
+### Code and Configuration Changes
+- **React Native 0.88 Strict TypeScript API:** Migrated `ViewToken` in `app/(auth)/OnboardingScreen.tsx` to `ListViewToken` from `react-native`.
+- **App Configuration (`app.json`):** Removed deprecated top-level `"splash"` object (managed via `expo-splash-screen` plugin) and standardized icon paths to square assets (`assets/icon.png`).
+- **Audit Verification:** Confirmed 0 usages of removed APIs (`InteractionManager`, root `Touchable`, `NativeMethods`, `Modal.animated`, deprecated `StatusBar` props, or internal `Libraries/*` imports).
+- **SQLite Database Integrity:** Preserved all local schemas, transactions, wallets, and queries intact (`SQLite.openDatabaseAsync`).
+
+### Verification & Testing
+- **TypeScript:** `npm run typecheck` (`tsc --noEmit`) passes with 0 errors.
+- **Test Suite:** `npm test` runs 14 test suites, 101 tests passing.
+- **Expo Doctor:** `npx expo-doctor` 20/20 checks passed with 0 issues.
+- **Metro Production Bundling:**
+  - iOS: `expo export -p ios` bundled 3582 modules successfully into Hermes Bytecode (`.hbc`).
+  - Android: `expo export -p android` bundled 3579 modules successfully into Hermes Bytecode (`.hbc`).
+
+### Running the Upgraded App
+- **Android:** Run `npm start` and press `a`, or build a preview APK with `npx eas-cli build -p android --profile preview`.
+- **iPhone (iOS 27):**
+  - **Expo Go:** Note that the public App Store release of Expo Go for SDK 58 follows the official SDK release by a few weeks. If the installed Expo Go app on the device reports an SDK mismatch, use a development build.
+  - **Development Build (Recommended for SDK 58):** Build an iOS development client via EAS (`eas build --platform ios --profile development`) and install it onto the iPhone, then start the dev server with `npm start`.
+  - **Local Xcode Build (macOS only):** If building locally on a Mac, run `npx expo run:ios`. (On Linux/Windows, local iOS compilation is not available; EAS remote builds must be used).
 
 ## Documentation
 

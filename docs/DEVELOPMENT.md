@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node **22.13+** (React Native 0.86 supports `^20.19.4 || ^22.13.0 || ^24.3.0 || >=25`).
+- Node **22.13+** (React Native 0.88 / Expo SDK 58 supports Node 22.13+, 24.3+, or 26+).
 - **npm**. `package-lock.json` is authoritative; do not use yarn or pnpm. `.npmrc` sets `legacy-peer-deps=true`.
 - Android: Android Studio or SDK, plus a device or emulator.
 - iOS: macOS and Xcode only.
