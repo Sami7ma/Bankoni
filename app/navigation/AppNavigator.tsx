@@ -2,12 +2,10 @@
 // and the main application. Database initialization failures fail closed.
 
 import { useEffect } from 'react';
-import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { ArrowLeftRight, BarChart, Home, PiggyBank, Settings as SettingsIcon, Wallet as WalletIcon } from 'lucide-react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
 
@@ -19,6 +17,7 @@ import LedgerScreen from '../(app)/LedgerScreen';
 import BudgetsScreen from '../(app)/BudgetsScreen';
 import AnalyticsScreen from '../(app)/AnalyticsScreen';
 import SettingsScreen from '../(app)/SettingsScreen';
+import LiquidGlassTabBar from '../../components/navigation/LiquidGlassTabBar';
 import PrimaryButton from '../../components/common/buttons/PrimaryButton';
 
 export type AuthStackParamList = {
@@ -75,39 +74,22 @@ function AuthNavigator() {
 }
 
 function AppTabNavigator() {
-  const colors = useTheme();
-  const insets = useSafeAreaInsets();
-
   return (
     <AppTabs.Navigator
-      screenOptions={({ route }) => ({
+      tabBar={(props) => <LiquidGlassTabBar {...props} />}
+      screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.surface,
-          borderTopColor: colors.border,
-          borderTopWidth: 1,
-          height: Platform.OS === 'ios'
-            ? (insets.bottom > 0 ? 50 + insets.bottom : 60)
-            : 60 + insets.bottom,
-          paddingBottom: Platform.OS === 'ios' ? Math.max(8, insets.bottom > 0 ? insets.bottom / 2 : 8) : 8,
-          paddingTop: 6,
-        },
-        tabBarActiveTintColor: colors.champagne,
-        tabBarInactiveTintColor: colors.textSecondary,
-        tabBarLabelStyle: { fontSize: 11, fontWeight: '500' },
-        tabBarIcon: ({ color }) => {
-          if (route.name === 'Home') return <Home size={22} color={color} />;
-          if (route.name === 'Ledger') return <WalletIcon size={22} color={color} />;
-          if (route.name === 'Budgets') return <PiggyBank size={22} color={color} />;
-          if (route.name === 'Analytics') return <BarChart size={22} color={color} />;
-          if (route.name === 'Settings') return <SettingsIcon size={22} color={color} />;
-          return null;
+          position: 'absolute',
+          backgroundColor: 'transparent',
+          borderTopWidth: 0,
+          elevation: 0,
         },
         animation: 'none',
-      })}
+      }}
     >
       <AppTabs.Screen name="Home" component={HomeScreen} />
-      <AppTabs.Screen name="Ledger" component={LedgerScreen} options={{ tabBarLabel: 'Ledger' }} />
+      <AppTabs.Screen name="Ledger" component={LedgerScreen} options={{ tabBarLabel: 'Wallets' }} />
       <AppTabs.Screen name="Budgets" component={BudgetsScreen} options={{ tabBarLabel: 'Budgets' }} />
       <AppTabs.Screen name="Analytics" component={AnalyticsScreen} options={{ tabBarLabel: 'Analytics' }} />
       <AppTabs.Screen name="Settings" component={SettingsScreen} options={{ tabBarLabel: 'Settings' }} />
