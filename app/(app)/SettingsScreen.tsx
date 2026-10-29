@@ -732,7 +732,8 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         },
         headerTitle: {
             fontSize: 28,
-            fontWeight: 'bold',
+            fontWeight: '700',
+            letterSpacing: 0.3,
             color: colors.textPrimary,
         },
         headerSubtitle: {
@@ -743,7 +744,7 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         },
         scrollContent: {
             paddingHorizontal: 14,
-            paddingBottom: 28,
+            paddingBottom: 90,
             gap: 12,
         },
         sectionCard: {

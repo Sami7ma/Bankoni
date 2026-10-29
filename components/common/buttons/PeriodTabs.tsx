@@ -1,53 +1,23 @@
-// components/common/charts/PeriodTabs.tsx
+// components/common/buttons/PeriodTabs.tsx
 //
-// Animated period selector with a sliding gold highlight.
-// Shows three tabs: Week | Month | Year
-//
-// HOW THE ANIMATION WORKS:
-// We use Animated.Value to track which tab is active (0, 1, or 2).
-// When the user taps a tab, Animated.timing smoothly slides
-// the gold background indicator from one tab position to another.
-//
-// useRef(new Animated.Value(1)) — starts at index 1 (Month)
-// because that's the default selected period.
-//
-// interpolate() maps the animated value to pixel positions:
-//   0 → left edge (Week)
-//   1 → middle (Month)
-//   2 → right edge (Year)
-//
-// useNativeDriver: true — runs the animation on the native thread
-// so it stays smooth even if JS is busy computing chart data.
-//
-// WHY A SEPARATE COMPONENT?
-// The animated tab logic is 30+ lines of animation code.
-// AnalyticsScreen shouldn't care about slide animations — it just
-// needs to know WHICH period is selected. This component owns
-// the animation, the parent owns the state.
+// Animated liquid glass period selector matching the Accounts/Transactions
+// switcher from LedgerScreen.
+// Shows three tabs: Week | Month | Year with fluid glass pill animation.
 
-import { useRef } from 'react';
+import { useRef, useState, useEffect } from 'react';
 import {
     View,
     Text,
     StyleSheet,
     TouchableOpacity,
     Animated,
-    Easing,
-    Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import useTheme from '../../../hooks/useTheme';
 
-// ── CONSTANTS ────────────────────────────────────────────
-// Each tab is 1/3 of the container width (minus padding).
-const TAB_WIDTH = (Dimensions.get('window').width - 28) / 3;
-
-// The three period options
 export type Period = 'Week' | 'Month' | 'Year';
 const PERIODS: Period[] = ['Week', 'Month', 'Year'];
 
-// ── PROPS ────────────────────────────────────────────────
-// selected = which tab is currently active
-// onSelect = callback when user taps a tab
 interface PeriodTabsProps {
     selected: Period;
     onSelect: (period: Period) => void;
@@ -55,101 +25,145 @@ interface PeriodTabsProps {
 
 export default function PeriodTabs({ selected, onSelect }: PeriodTabsProps) {
     const colors = useTheme();
-    const styles = createStyles(colors);
+    const isDark = colors.statusBar === 'light';
+    const styles = createStyles(colors, isDark);
 
-    // Animated value that controls the gold indicator position.
-    // Starts at 1 (Month) because that's the default.
-    const defaultIndex = PERIODS.indexOf(selected);
-    const tabPosition = useRef(new Animated.Value(defaultIndex)).current;
+    const activeIndex = PERIODS.indexOf(selected);
+    const [containerWidth, setContainerWidth] = useState(0);
+    const segmentAnim = useRef(new Animated.Value(activeIndex)).current;
 
-    // When a tab is tapped:
-    // 1. Animate the gold indicator to the new position
-    // 2. Tell the parent which period was selected
-    const handlePress = (period: Period) => {
-        const index = PERIODS.indexOf(period);
-
-        Animated.timing(tabPosition, {
-            toValue: index,
-            duration: 350,
-            easing: Easing.out(Easing.cubic),
+    useEffect(() => {
+        Animated.spring(segmentAnim, {
+            toValue: activeIndex,
+            tension: 70,
+            friction: 10,
             useNativeDriver: true,
         }).start();
+    }, [activeIndex]);
 
-        onSelect(period);
-    };
+    const tabWidth = containerWidth > 0 ? (containerWidth - 6) / 3 : 0;
 
     return (
-        <View style={styles.container}>
-            {/* ANIMATED GOLD INDICATOR — slides behind the active tab */}
-            <Animated.View
-                style={[
-                    styles.indicator,
-                    {
-                        transform: [
-                            {
-                                translateX: tabPosition.interpolate({
-                                    inputRange: [0, 1, 2],
-                                    outputRange: [0, TAB_WIDTH, TAB_WIDTH * 2],
-                                }),
-                            },
-                        ],
-                    },
-                ]}
-            />
-
-            {/* TAB BUTTONS */}
-            {PERIODS.map((p) => (
-                <TouchableOpacity
-                    key={p}
-                    style={styles.tab}
-                    onPress={() => handlePress(p)}
-                    activeOpacity={0.8}
-                >
-                    <Text
+        <View style={styles.segmentWrapper}>
+            <View
+                style={styles.segmentContainer}
+                onLayout={(e) => {
+                    const w = e.nativeEvent.layout.width;
+                    if (w && Math.abs(w - containerWidth) > 1) {
+                        setContainerWidth(w);
+                    }
+                }}
+            >
+                {/* Animated Liquid Glass Bubble */}
+                {containerWidth > 0 && (
+                    <Animated.View
                         style={[
-                            styles.tabText,
-                            selected === p && styles.tabTextActive,
+                            styles.segmentBubble,
+                            {
+                                width: Math.max(tabWidth, 0),
+                                transform: [
+                                    {
+                                        translateX: segmentAnim.interpolate({
+                                            inputRange: [0, 1, 2],
+                                            outputRange: [0, tabWidth, tabWidth * 2],
+                                        }),
+                                    },
+                                ],
+                            },
                         ]}
+                        pointerEvents="none"
                     >
-                        {p}
-                    </Text>
-                </TouchableOpacity>
-            ))}
+                        <LinearGradient
+                            colors={
+                                isDark
+                                    ? ['rgba(255, 255, 255, 0.16)', 'rgba(255, 255, 255, 0.06)']
+                                    : ['rgba(255, 255, 255, 0.96)', 'rgba(255, 255, 255, 0.85)']
+                            }
+                            start={{ x: 0, y: 0 }}
+                            end={{ x: 1, y: 1 }}
+                            style={StyleSheet.absoluteFill}
+                        />
+                        <View style={styles.segmentBubbleSheen} />
+                    </Animated.View>
+                )}
+
+                {/* Tab buttons */}
+                {PERIODS.map((p) => {
+                    const isActive = selected === p;
+                    return (
+                        <TouchableOpacity
+                            key={p}
+                            style={styles.segmentBtn}
+                            onPress={() => onSelect(p)}
+                            activeOpacity={0.8}
+                        >
+                            <Text
+                                style={[
+                                    styles.segmentBtnText,
+                                    isActive && styles.segmentBtnTextActive,
+                                ]}
+                            >
+                                {p}
+                            </Text>
+                        </TouchableOpacity>
+                    );
+                })}
+            </View>
         </View>
     );
 }
 
-// ── STYLES ───────────────────────────────────────────────
-const createStyles = (colors: ReturnType<typeof useTheme>) =>
+const createStyles = (colors: ReturnType<typeof useTheme>, isDark: boolean) =>
     StyleSheet.create({
-        container: {
+        segmentWrapper: {
+            marginTop: 2,
+            marginBottom: 2,
+        },
+        segmentContainer: {
             flexDirection: 'row',
-            backgroundColor: colors.surface,
-            borderRadius: 12,
-            padding: 4,
+            height: 38,
+            borderRadius: 19,
+            padding: 2,
+            backgroundColor: 'transparent',
+            overflow: 'hidden',
             position: 'relative',
         },
-        indicator: {
+        segmentBubble: {
             position: 'absolute',
-            top: 4,
-            bottom: 4,
-            width: '31%',
-            borderRadius: 10,
-            backgroundColor: colors.champagne,
+            top: 2,
+            bottom: 2,
+            left: 2,
+            borderRadius: 17,
+            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.06)',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255, 255, 255, 0.20)' : 'rgba(0, 0, 0, 0.08)',
+            overflow: 'hidden',
         },
-        tab: {
+        segmentBubbleSheen: {
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: '46%',
+            borderTopLeftRadius: 17,
+            borderTopRightRadius: 17,
+            backgroundColor: isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(255, 255, 255, 0.35)',
+        },
+        segmentBtn: {
             flex: 1,
-            paddingVertical: 10,
-            borderRadius: 10,
             alignItems: 'center',
-            zIndex: 1,
+            justifyContent: 'center',
+            height: '100%',
+            borderRadius: 17,
+            zIndex: 2,
         },
-        tabText: {
-            fontSize: 14,
+        segmentBtnText: {
+            fontSize: 13.5,
             fontWeight: '600',
             color: colors.textSecondary,
         },
-        tabTextActive: {
-            color: colors.background,
+        segmentBtnTextActive: {
+            color: colors.champagne,
+            fontWeight: '700',
         },
     });

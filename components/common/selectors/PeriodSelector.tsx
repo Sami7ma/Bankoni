@@ -20,7 +20,7 @@
 // (collecting budget data) instead of managing date logic.
 
 import { useState, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, FlatList, } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import { Calendar as CalendarIcon } from 'lucide-react-native';
 import { Calendar } from 'react-native-calendars';
 import useTheme from '../../../hooks/useTheme';
@@ -136,7 +136,7 @@ function PeriodWheel({
     const colors = useTheme();
     const styles = createStyles(colors);
     const ITEM_HEIGHT = 42;
-    const listRef = useRef<FlatList>(null);
+    const scrollRef = useRef<React.ElementRef<typeof ScrollView>>(null);
 
     const selectedIndex = PERIOD_OPTIONS.findIndex(
         (item) => item.value === value
@@ -152,26 +152,21 @@ function PeriodWheel({
 
     return (
         <View style={styles.wheelContainer}>
-            <FlatList
-                ref={listRef}
-                data={PERIOD_OPTIONS}
-                keyExtractor={(item) => item.value}
+            <ScrollView
+                ref={scrollRef}
                 showsVerticalScrollIndicator={false}
                 snapToInterval={ITEM_HEIGHT}     // snaps to each item
                 decelerationRate="fast"          // stops quickly after flick
                 bounces={false}
-                getItemLayout={(_, index) => ({
-                    length: ITEM_HEIGHT,
-                    offset: ITEM_HEIGHT * index,
-                    index,
-                })}
+                nestedScrollEnabled={true}
                 contentContainerStyle={{ paddingVertical: ITEM_HEIGHT }}
-                initialScrollIndex={selectedIndex >= 0 ? selectedIndex : 0}
+                contentOffset={{ x: 0, y: Math.max(selectedIndex, 0) * ITEM_HEIGHT }}
                 onMomentumScrollEnd={handleScrollEnd}
-                renderItem={({ item }) => {
+            >
+                {PERIOD_OPTIONS.map((item) => {
                     const isActive = item.value === value;
                     return (
-                        <View style={[styles.wheelItem, { height: ITEM_HEIGHT }]}>
+                        <View key={item.value} style={[styles.wheelItem, { height: ITEM_HEIGHT }]}>
                             <Text
                                 style={[
                                     styles.wheelText,
@@ -182,8 +177,8 @@ function PeriodWheel({
                             </Text>
                         </View>
                     );
-                }}
-            />
+                })}
+            </ScrollView>
             {/* Selection highlight bar — sits behind the center item */}
             <View pointerEvents="none" style={styles.wheelHighlight} />
         </View>

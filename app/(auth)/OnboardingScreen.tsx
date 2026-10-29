@@ -7,7 +7,7 @@ import {
     TouchableOpacity,
     View,
     type ListRenderItem,
-    type ViewToken,
+    type ListViewToken,
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { ChartNoAxesCombined, Target, WalletCards } from 'lucide-react-native';
@@ -66,7 +66,7 @@ export default function OnboardingScreen({ navigation }: Props) {
     }, [activeIndex, goToSlide, navigation]);
 
     const onViewableItemsChanged = useRef(
-        ({ viewableItems }: { viewableItems: ViewToken[] }) => {
+        ({ viewableItems }: { viewableItems: ListViewToken[] }) => {
             const index = viewableItems.find((token) => token.isViewable)?.index;
             if (typeof index === 'number') setActiveIndex(index);
         },
