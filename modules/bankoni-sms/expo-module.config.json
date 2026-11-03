@@ -1,0 +1,19 @@
+{
+  "platforms": [
+    "apple",
+    "android"
+  ],
+  "apple": {
+    "modules": [
+      "BanKoniSmsModule"
+    ],
+    "appDelegateSubscribers": [
+      "SmsRecoverySubscriber"
+    ]
+  },
+  "android": {
+    "modules": [
+      "com.bankoni.sms.BanKoniSmsModule"
+    ]
+  }
+}

@@ -68,3 +68,10 @@ CLAUDE.md
 
 # Test coverage reports
 coverage/
+
+# Local SMS module build intermediates (source and engine resource remain included)
+/modules/bankoni-sms/android/build
+/modules/bankoni-sms/android/.gradle
+/modules/bankoni-sms/android/.cxx
+/modules/bankoni-sms/android/.kotlin
+/modules/bankoni-sms/ios/build

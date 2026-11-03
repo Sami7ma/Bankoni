@@ -45,7 +45,8 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "./plugins/withAutomaticSms.cjs"
     ],
     "extra": {
       "eas": {
