@@ -1,0 +1,17 @@
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+group = 'com.bankoni.sms'
+version = '1.0.0'
+android {
+  namespace 'com.bankoni.sms'
+  defaultConfig { versionCode 1; versionName '1.0.0' }
+  testOptions { unitTests.includeAndroidResources = true }
+}
+dependencies {
+  implementation 'com.facebook.react:react-android'
+  implementation 'androidx.work:work-runtime-ktx:2.11.0'
+  testImplementation 'junit:junit:4.13.2'
+  testImplementation 'org.robolectric:robolectric:4.16.1'
+}
