@@ -9,9 +9,12 @@ import { getPeriodDateRange } from '../date';
 import {
     calculatePeriodSummary,
     calculateCategoryBreakdown,
+    calculateMerchantBreakdown,
     calculateDailySpending,
     calculateChartData,
     calculateBudgetMetrics,
+    calculateReceivablesAndLiabilities,
+    calculateClassificationCoverage,
     generateFinancialInsights,
     filterEligibleTransactions,
 } from '../financial';
@@ -294,7 +297,11 @@ describe('Financial Intelligence Calculations Engine', () => {
             const summary = {
                 income: 15000,
                 expenses: 5000,
+                grossExpenses: 5000,
+                refunds: 0,
+                reimbursements: 0,
                 netCashFlow: 10000,
+                savingsRate: 66.7,
                 transactionCount: 8,
                 priorIncome: 12000,
                 priorExpenses: 6000,
@@ -420,6 +427,258 @@ describe('Financial Intelligence Calculations Engine', () => {
             expect(bMetrics.remaining).toBe(69.70);
         });
     });
-});
 
+    describe('Financial Subtype Distinctions & Economics', () => {
+        it('excludes borrowed loan disbursement from earned income but counts in cash flow', () => {
+            const txs: Transaction[] = [
+                // Borrowed 10,000 ETB loan disbursement
+                {
+                    id: 'loan-borrow',
+                    amount: 10000,
+                    type: 'CREDIT',
+                    subType: 'LOAN_DISBURSEMENT',
+                    categoryId: 'cat-salary',
+                    date: '2026-10-25T10:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+                // Salary earned: 5000 ETB
+                {
+                    id: 'salary',
+                    amount: 5000,
+                    type: 'CREDIT',
+                    subType: 'STANDARD',
+                    categoryId: 'cat-salary',
+                    date: '2026-10-26T10:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+            ];
+
+            const summary = calculatePeriodSummary(txs, weekRange);
+            // Earned income should be only the 5,000 ETB salary, NOT 15,000 ETB!
+            expect(summary.income).toBe(5000);
+            // Net cash flow reflects the 15,000 ETB that entered the wallet
+            expect(summary.netCashFlow).toBe(15000);
+        });
+
+        it('excludes lent loan disbursement from personal spending but counts in cash flow', () => {
+            const txs: Transaction[] = [
+                // Lent 4,000 ETB to friend
+                {
+                    id: 'loan-lent',
+                    amount: 4000,
+                    type: 'DEBIT',
+                    subType: 'LOAN_DISBURSEMENT',
+                    categoryId: 'cat-groceries',
+                    date: '2026-10-25T10:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+                // Actual grocery spending: 1,500 ETB
+                {
+                    id: 'groceries',
+                    amount: 1500,
+                    type: 'DEBIT',
+                    subType: 'STANDARD',
+                    categoryId: 'cat-groceries',
+                    date: '2026-10-26T10:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+            ];
+
+            const summary = calculatePeriodSummary(txs, weekRange);
+            // Personal spending should be only 1,500 ETB, NOT 5,500 ETB!
+            expect(summary.expenses).toBe(1500);
+            // Net cash flow reflects all 5,500 ETB leaving the wallet
+            expect(summary.netCashFlow).toBe(-5500);
+        });
+
+        it('deducts refunds and reimbursements from personal spending and does not count as income', () => {
+            const txs: Transaction[] = [
+                // Original purchase of 1,200 ETB for shared lunch
+                {
+                    id: 'orig-exp',
+                    amount: 1200,
+                    type: 'DEBIT',
+                    subType: 'SHARED_EXPENSE',
+                    categoryId: 'cat-groceries',
+                    date: '2026-10-25T12:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+                // Partial reimbursement of 300 ETB received
+                {
+                    id: 'reimb-1',
+                    amount: 300,
+                    type: 'CREDIT',
+                    subType: 'REIMBURSEMENT',
+                    categoryId: 'cat-groceries',
+                    date: '2026-10-26T14:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+                // Second partial reimbursement of 300 ETB received
+                {
+                    id: 'reimb-2',
+                    amount: 300,
+                    type: 'CREDIT',
+                    subType: 'REIMBURSEMENT',
+                    categoryId: 'cat-groceries',
+                    date: '2026-10-27T14:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+                // Third partial reimbursement of 300 ETB received
+                {
+                    id: 'reimb-3',
+                    amount: 300,
+                    type: 'CREDIT',
+                    subType: 'REIMBURSEMENT',
+                    categoryId: 'cat-groceries',
+                    date: '2026-10-28T14:00:00+03:00',
+                    status: 'CLEARED',
+                    walletId: 'w-cbe',
+                    createdAt: '',
+                },
+            ];
+
+            const summary = calculatePeriodSummary(txs, weekRange);
+            // Original: 1200. Reimbursements: 900 total.
+            // Earned income MUST BE 0!
+            expect(summary.income).toBe(0);
+            expect(summary.reimbursements).toBe(900);
+            // Realized personal cost: 1200 - 900 = 300
+            expect(summary.expenses).toBe(300);
+            // Net wallet movement: -1200 + 900 = -300
+            expect(summary.netCashFlow).toBe(-300);
+        });
+
+        it('calculates merchant breakdown and percentage', () => {
+            const txs: Transaction[] = [
+                { id: '1', amount: 500, type: 'DEBIT', counterparty: 'Tomoca Coffee', date: '2026-10-25T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', categoryId: 'cat-groceries', createdAt: '' },
+                { id: '2', amount: 300, type: 'DEBIT', counterparty: 'Tomoca Coffee', date: '2026-10-26T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', categoryId: 'cat-groceries', createdAt: '' },
+                { id: '3', amount: 200, type: 'DEBIT', counterparty: 'Mulmul Bakery', date: '2026-10-27T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', categoryId: 'cat-groceries', createdAt: '' },
+            ];
+
+            const breakdown = calculateMerchantBreakdown(txs, weekRange.startDate, weekRange.endDate);
+            expect(breakdown).toHaveLength(2);
+            expect(breakdown[0].name).toBe('Tomoca Coffee');
+            expect(breakdown[0].amount).toBe(800);
+            expect(breakdown[0].percentage).toBe('80.0');
+            expect(breakdown[0].transactionCount).toBe(2);
+            expect(breakdown[1].name).toBe('Mulmul Bakery');
+            expect(breakdown[1].amount).toBe(200);
+            expect(breakdown[1].percentage).toBe('20.0');
+        });
+
+        it('calculates merchant breakdown using personal share for shared bills', () => {
+            const txs: Transaction[] = [
+                { id: 'tx-shared', amount: 1000, type: 'DEBIT', subType: 'SHARED_EXPENSE', counterparty: 'Bole Restaurant', date: '2026-10-25T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', categoryId: 'cat-dining', createdAt: '' },
+                { id: 'tx-solo', amount: 200, type: 'DEBIT', counterparty: 'Tomoca Coffee', date: '2026-10-26T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', categoryId: 'cat-dining', createdAt: '' },
+            ];
+
+            const sharedExpenses = [
+                {
+                    id: 'se-1',
+                    transactionId: 'tx-shared',
+                    totalAmount: 1000,
+                    personalShare: 200, // User only spent 200 personally, remaining 800 is receivable
+                    totalReimbursed: 0,
+                    outstandingReceivable: 800,
+                    realizedPersonalCost: 1000,
+                    participants: [],
+                    reimbursements: [],
+                    createdAt: '',
+                },
+            ];
+
+            const breakdown = calculateMerchantBreakdown(txs, weekRange.startDate, weekRange.endDate, sharedExpenses);
+            expect(breakdown).toHaveLength(2);
+            // Total personal spending across merchants = 200 + 200 = 400
+            // Bole Restaurant personal share: 200 (50.0%)
+            // Tomoca Coffee: 200 (50.0%)
+            expect(breakdown[0].amount).toBe(200);
+            expect(breakdown[0].percentage).toBe('50.0');
+            expect(breakdown[1].amount).toBe(200);
+            expect(breakdown[1].percentage).toBe('50.0');
+        });
+
+        it('calculates receivables and liabilities accurately', () => {
+            const sharedExpenses = [
+                {
+                    id: 'se-1',
+                    transactionId: 'tx-1',
+                    totalAmount: 1200,
+                    personalShare: 300,
+                    totalReimbursed: 600,
+                    outstandingReceivable: 300, // 900 expected - 600 reimbursed = 300 remaining
+                    realizedPersonalCost: 600,
+                    participants: [],
+                    reimbursements: [],
+                    createdAt: '',
+                },
+            ];
+
+            const loans = [
+                {
+                    id: 'loan-1',
+                    type: 'LENT' as const,
+                    counterparty: 'Abebe',
+                    principalAmount: 5000,
+                    status: 'ACTIVE' as const,
+                    repayments: [],
+                    totalPrincipalRepaid: 2000,
+                    totalInterestPaid: 0,
+                    totalFeePaid: 0,
+                    remainingPrincipal: 3000,
+                    createdAt: '',
+                },
+                {
+                    id: 'loan-2',
+                    type: 'BORROWED' as const,
+                    counterparty: 'Bank',
+                    principalAmount: 10000,
+                    status: 'ACTIVE' as const,
+                    repayments: [],
+                    totalPrincipalRepaid: 4000,
+                    totalInterestPaid: 500,
+                    totalFeePaid: 50,
+                    remainingPrincipal: 6000,
+                    createdAt: '',
+                },
+            ];
+
+            const summary = calculateReceivablesAndLiabilities(sharedExpenses, loans);
+            expect(summary.sharedExpensesReceivable).toBe(300);
+            expect(summary.lentLoansReceivable).toBe(3000);
+            expect(summary.totalReceivables).toBe(3300);
+            expect(summary.borrowedLoansPayable).toBe(6000);
+            expect(summary.totalLiabilities).toBe(6000);
+            expect(summary.netPosition).toBe(-2700); // 3300 - 6000
+        });
+
+        it('calculates classification coverage correctly', () => {
+            const txs: Transaction[] = [
+                { id: '1', amount: 100, type: 'DEBIT', categoryId: 'cat-groceries', date: '2026-10-25T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', createdAt: '' },
+                { id: '2', amount: 200, type: 'DEBIT', categoryId: 'cat-transport', date: '2026-10-26T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', createdAt: '' },
+                { id: '3', amount: 50, type: 'DEBIT', categoryId: 'cat-14', date: '2026-10-27T10:00:00+03:00', status: 'CLEARED', walletId: 'w-cbe', createdAt: '' }, // Unclassified misc
+            ];
+
+            const coverage = calculateClassificationCoverage(txs);
+            expect(coverage.totalTransactions).toBe(3);
+            expect(coverage.classifiedTransactions).toBe(2);
+            expect(coverage.unclassifiedTransactions).toBe(1);
+            expect(coverage.coveragePercentage).toBe(66.7);
+        });
+    });
+});
 
