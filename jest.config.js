@@ -5,6 +5,7 @@ module.exports = {
     testEnvironment: 'node',
     testMatch: ['<rootDir>/**/__tests__/**/*.test.ts'],
     testPathIgnorePatterns: ['/node_modules/', '/android/', '/ios/', '/dist/'],
+    transformIgnorePatterns: ['/node_modules/(?!@noble/hashes/)'],
     transform: {
         '^.+\\.(ts|tsx|js)$': ['babel-jest', { configFile: './babel.config.js' }],
     },
