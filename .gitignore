@@ -13,12 +13,23 @@ expo-env.d.ts
 
 # Native
 .kotlin/
+.gradle/
+**/build/
+local.properties
+*.apk
+*.aab
+*.ipa
 *.orig.*
 *.jks
 *.p8
 *.p12
 *.key
 *.mobileprovision
+
+# Xcode user and derived data
+DerivedData/
+**/xcuserdata/
+*.xcuserstate
 
 # Metro
 .metro-health-check*
@@ -27,6 +38,19 @@ expo-env.d.ts
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+*.log
+
+# test and temporary output
+coverage/
+/docs/verification/
+*.tmp
+*.temp
+*.bak
+
+# Standalone Scriptable companion distribution (not part of the app build)
+/scriptable/
+/scripts/build-scriptable.cjs
+/sms/companion/__tests__/scriptableRuntime.test.ts
 
 # macOS & OS
 .DS_Store
