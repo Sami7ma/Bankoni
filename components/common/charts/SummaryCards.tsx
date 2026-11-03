@@ -19,6 +19,7 @@ export interface SummaryCardsProps {
     hasSufficientPriorHistory?: boolean;
     averageDailySpending?: number | null;
     activeSpendingDays?: number;
+    savingsRate?: number | null;
 }
 
 export default function SummaryCards({
@@ -30,6 +31,7 @@ export default function SummaryCards({
     incomeChangePercentage,
     hasSufficientPriorHistory,
     averageDailySpending,
+    savingsRate,
 }: SummaryCardsProps) {
     const colors = useTheme();
     const styles = createStyles(colors);
@@ -115,6 +117,11 @@ export default function SummaryCards({
                     >
                         {isSurplus ? '+' : ''}{formatEtb(netCashFlow)}
                     </Text>
+                    {savingsRate !== null && savingsRate !== undefined && (
+                        <Text style={[styles.savingsRateText, { color: colors.champagne }]}>
+                            {savingsRate.toFixed(1)}% savings rate
+                        </Text>
+                    )}
                 </View>
 
                 <View style={styles.cashFlowRight}>
@@ -241,6 +248,11 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         cashFlowAmount: {
             fontSize: 15,
             fontWeight: '700',
+        },
+        savingsRateText: {
+            fontSize: 10,
+            fontWeight: '600',
+            marginTop: 1,
         },
         cashFlowRight: {
             alignItems: 'flex-end',

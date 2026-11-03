@@ -82,8 +82,23 @@ export default function TransactionRow({
                 <View style={styles.info}>
                     <View style={styles.titleRow}>
                         <Text style={styles.categoryName} numberOfLines={1}>
-                            {category?.name ?? 'Uncategorized'}
+                            {transaction.counterparty?.trim() || category?.name || 'Uncategorized'}
                         </Text>
+                        {transaction.subType === 'TRANSFER' && (
+                            <View style={styles.subTypeBadge}>
+                                <Text style={styles.subTypeBadgeText}>Transfer</Text>
+                            </View>
+                        )}
+                        {transaction.subType === 'SHARED_EXPENSE' && (
+                            <View style={[styles.subTypeBadge, { borderColor: colors.champagne }]}>
+                                <Text style={[styles.subTypeBadgeText, { color: colors.champagne }]}>Split</Text>
+                            </View>
+                        )}
+                        {transaction.subType === 'REIMBURSEMENT' && (
+                            <View style={[styles.subTypeBadge, { borderColor: colors.success }]}>
+                                <Text style={[styles.subTypeBadgeText, { color: colors.success }]}>Reimbursement</Text>
+                            </View>
+                        )}
                         {wallet ? (
                             <Text style={styles.walletText} numberOfLines={1}>
                                 • {wallet.name}
@@ -91,6 +106,7 @@ export default function TransactionRow({
                         ) : null}
                     </View>
                     <Text style={styles.meta} numberOfLines={1}>
+                        {transaction.counterparty?.trim() && category?.name ? `${category.name} • ` : ''}
                         {transaction.note ? `${transaction.note} • ${formattedDate}` : formattedDate}
                     </Text>
                 </View>
@@ -177,6 +193,20 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
             fontSize: 12,
             color: colors.textSecondary,
             flexShrink: 1,
+        },
+        subTypeBadge: {
+            paddingHorizontal: 5,
+            paddingVertical: 1.5,
+            borderRadius: 4,
+            borderWidth: 1,
+            borderColor: colors.border,
+            backgroundColor: `${colors.surface}80`,
+        },
+        subTypeBadgeText: {
+            fontSize: 9.5,
+            fontWeight: '600',
+            color: colors.textSecondary,
+            textTransform: 'uppercase',
         },
         meta: {
             fontSize: 12,

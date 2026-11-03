@@ -7,7 +7,17 @@ import { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
-import { AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react-native';
+import {
+    AlertTriangle,
+    TrendingUp,
+    TrendingDown,
+    Store,
+    Users,
+    Calendar,
+    Wifi,
+    ArrowDownLeft,
+    ArrowUpRight,
+} from 'lucide-react-native';
 
 import useTheme from '../../hooks/useTheme';
 import useBanKoniStore from '../../store/useBanKoniStore';
@@ -24,6 +34,8 @@ import {
     filterEligibleTransactions,
     calculatePeriodSummary,
     calculateCategoryBreakdown,
+    calculateMerchantBreakdown,
+    calculateReceivablesAndLiabilities,
     calculateDailySpending,
     calculateChartData,
     calculateBudgetMetrics,
@@ -53,6 +65,11 @@ export default function AnalyticsScreen() {
     const wallets = useBanKoniStore((state) => state.wallets);
     const categories = useBanKoniStore((state) => state.categories);
     const budgets = useBanKoniStore((state) => state.budgets);
+    const sharedExpenses = useBanKoniStore((state) => state.sharedExpenses);
+    const loans = useBanKoniStore((state) => state.loans);
+    const recurringCommitments = useBanKoniStore((state) => state.recurringCommitments);
+    const telecomPackages = useBanKoniStore((state) => state.telecomPackages);
+    const telecomEvents = useBanKoniStore((state) => state.telecomEvents);
 
     // Current Ethiopian local calendar date (EAT UTC+3)
     const todayStr = useMemo(() => getTodayEthiopianDateString(), []);
@@ -102,6 +119,24 @@ export default function AnalyticsScreen() {
                 dateRange.endDate
             ),
         [eligibleTransactions, categories, dateRange]
+    );
+
+    // Merchant breakdown strictly within the selected period (using personal spending for shared bills)
+    const topMerchants = useMemo(
+        () =>
+            calculateMerchantBreakdown(
+                eligibleTransactions,
+                dateRange.startDate,
+                dateRange.endDate,
+                sharedExpenses
+            ),
+        [eligibleTransactions, dateRange, sharedExpenses]
+    );
+
+    // Receivables and liabilities (shared expenses + loans)
+    const receivablesAndLiabilities = useMemo(
+        () => calculateReceivablesAndLiabilities(sharedExpenses, loans),
+        [sharedExpenses, loans]
     );
 
     // Budget metrics and status evaluation
@@ -184,6 +219,7 @@ export default function AnalyticsScreen() {
                     hasSufficientPriorHistory={periodSummary.hasSufficientPriorHistory}
                     averageDailySpending={dailySpending.hasSufficientData ? dailySpending.averageDaily : null}
                     activeSpendingDays={dailySpending.activeDays}
+                    savingsRate={periodSummary.savingsRate}
                 />
 
                 {/* SPENDING TREND — chart */}
@@ -262,6 +298,200 @@ export default function AnalyticsScreen() {
                     <Text style={styles.sectionTitle}>Top Spendings</Text>
                     <TopSpendingList data={topSpending} />
                 </View>
+
+                {/* TOP MERCHANTS — normalized places & shops breakdown */}
+                {topMerchants.length > 0 && (
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeaderRow}>
+                            <Text style={styles.sectionTitle}>Top Merchants</Text>
+                            <Text style={styles.sectionSubtitle}>Recognized places & shops</Text>
+                        </View>
+                        <View style={styles.merchantsCard}>
+                            {topMerchants.map((merchant, idx) => (
+                                <View
+                                    key={`${merchant.name}-${idx}`}
+                                    style={[
+                                        styles.merchantRow,
+                                        idx < topMerchants.length - 1 && styles.merchantRowBorder,
+                                    ]}
+                                >
+                                    <View style={styles.merchantLeft}>
+                                        <View style={styles.merchantIconWrap}>
+                                            <Store size={15} color={colors.champagne} />
+                                        </View>
+                                        <View style={styles.merchantInfo}>
+                                            <Text style={styles.merchantName}>{merchant.name}</Text>
+                                            <View style={styles.merchantBadgeRow}>
+                                                {merchant.merchantType ? (
+                                                    <View style={styles.merchantTypeBadge}>
+                                                        <Text style={styles.merchantTypeText}>
+                                                            {merchant.merchantType}
+                                                        </Text>
+                                                    </View>
+                                                ) : null}
+                                                <Text style={styles.merchantTxCount}>
+                                                    {merchant.transactionCount} visit{merchant.transactionCount > 1 ? 's' : ''}
+                                                </Text>
+                                            </View>
+                                        </View>
+                                    </View>
+                                    <View style={styles.merchantRight}>
+                                        <Text style={styles.merchantAmount}>
+                                            {formatEtb(merchant.amount)}
+                                        </Text>
+                                        <Text style={styles.merchantPercent}>
+                                            {merchant.percentage}%
+                                        </Text>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
+
+                {/* RECEIVABLES & DEBTS — split expenses and loans */}
+                {(receivablesAndLiabilities.totalReceivables > 0 || receivablesAndLiabilities.totalLiabilities > 0) && (
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeaderRow}>
+                            <Text style={styles.sectionTitle}>Receivables & Obligations</Text>
+                            <Text style={styles.sectionSubtitle}>Shared expenses & debts</Text>
+                        </View>
+                        <View style={styles.receivablesCard}>
+                            <View style={styles.receivableCol}>
+                                <View style={styles.receivableHeaderRow}>
+                                    <ArrowDownLeft size={14} color={colors.success} />
+                                    <Text style={styles.receivableLabel}>OWED TO YOU</Text>
+                                </View>
+                                <Text style={[styles.receivableValue, { color: colors.success }]}>
+                                    {formatEtb(receivablesAndLiabilities.totalReceivables)}
+                                </Text>
+                                <Text style={styles.receivableSub}>
+                                    {formatEtb(receivablesAndLiabilities.sharedExpensesReceivable)} pending splits • {formatEtb(receivablesAndLiabilities.lentLoansReceivable)} loans
+                                </Text>
+                            </View>
+
+                            <View style={styles.receivableDivider} />
+
+                            <View style={styles.receivableCol}>
+                                <View style={styles.receivableHeaderRow}>
+                                    <ArrowUpRight size={14} color={colors.danger} />
+                                    <Text style={styles.receivableLabel}>YOU OWE</Text>
+                                </View>
+                                <Text style={[styles.receivableValue, { color: colors.danger }]}>
+                                    {formatEtb(receivablesAndLiabilities.totalLiabilities)}
+                                </Text>
+                                <Text style={styles.receivableSub}>
+                                    {formatEtb(receivablesAndLiabilities.borrowedLoansPayable)} outstanding debt
+                                </Text>
+                            </View>
+                        </View>
+                        <Text style={styles.receivableNote}>
+                            Shared expense reimbursements reduce realized out-of-pocket costs and do not count as income.
+                        </Text>
+                    </View>
+                )}
+
+                {/* RECURRING COMMITMENTS — education, rent, utilities */}
+                {recurringCommitments.length > 0 && (
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeaderRow}>
+                            <Text style={styles.sectionTitle}>Recurring Commitments</Text>
+                            <Text style={styles.sectionSubtitle}>Education, utilities & rent</Text>
+                        </View>
+                        <View style={styles.commitmentsCard}>
+                            {recurringCommitments.slice(0, 5).map((commitment, idx) => (
+                                <View
+                                    key={commitment.id}
+                                    style={[
+                                        styles.commitmentRow,
+                                        idx < Math.min(recurringCommitments.length, 5) - 1 && styles.commitmentRowBorder,
+                                    ]}
+                                >
+                                    <View style={styles.commitmentLeft}>
+                                        <View style={styles.commitmentIconWrap}>
+                                            <Calendar size={15} color={colors.champagne} />
+                                        </View>
+                                        <View style={styles.commitmentInfo}>
+                                            <Text style={styles.commitmentName}>{commitment.name}</Text>
+                                            <Text style={styles.commitmentMeta}>
+                                                {commitment.frequency} • Next: {commitment.nextExpectedDate || 'Scheduled'}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                    <View style={styles.commitmentRight}>
+                                        <Text style={styles.commitmentAmount}>
+                                            {commitment.expectedAmount ? formatEtb(commitment.expectedAmount) : 'Variable'}
+                                        </Text>
+                                        <View
+                                            style={[
+                                                styles.commitmentStatusBadge,
+                                                {
+                                                    backgroundColor:
+                                                        commitment.status === 'PAUSED' || commitment.status === 'CANCELLED'
+                                                            ? `${colors.danger}18`
+                                                            : `${colors.success}18`,
+                                                },
+                                            ]}
+                                        >
+                                            <Text
+                                                style={[
+                                                    styles.commitmentStatusText,
+                                                    {
+                                                        color:
+                                                            commitment.status === 'PAUSED' || commitment.status === 'CANCELLED'
+                                                                ? colors.danger
+                                                                : colors.success,
+                                                    },
+                                                ]}
+                                            >
+                                                {commitment.status}
+                                            </Text>
+                                        </View>
+                                    </View>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
+
+                {/* TELECOM INTELLIGENCE — packages and service events */}
+                {(telecomPackages.length > 0 || telecomEvents.length > 0) && (
+                    <View style={styles.section}>
+                        <View style={styles.sectionHeaderRow}>
+                            <Text style={styles.sectionTitle}>Telecom Intelligence</Text>
+                            <Text style={styles.sectionSubtitle}>Packages & service events</Text>
+                        </View>
+                        <View style={styles.telecomCard}>
+                            {telecomPackages.map((pkg) => (
+                                <View key={pkg.id} style={styles.telecomPkgRow}>
+                                    <View style={styles.telecomIconWrap}>
+                                        <Wifi size={15} color={colors.champagne} />
+                                    </View>
+                                    <View style={styles.telecomInfo}>
+                                        <Text style={styles.telecomPkgName}>{pkg.packageName}</Text>
+                                        <Text style={styles.telecomMeta}>
+                                            {pkg.category.toUpperCase()} • {pkg.isActive ? 'Active' : 'Inactive'}{pkg.validityPeriod ? ` • ${pkg.validityPeriod}` : ''}
+                                        </Text>
+                                    </View>
+                                </View>
+                            ))}
+                            {telecomEvents.slice(0, 3).map((evt, idx) => (
+                                <View
+                                    key={evt.id}
+                                    style={[
+                                        styles.telecomEventRow,
+                                        idx > 0 && styles.telecomEventBorder,
+                                    ]}
+                                >
+                                    <View style={styles.telecomEventDot} />
+                                    <Text style={styles.telecomEventText} numberOfLines={2}>
+                                        {evt.eventType}: {evt.rawSms}
+                                    </Text>
+                                </View>
+                            ))}
+                        </View>
+                    </View>
+                )}
 
                 {/* BUDGETS LIST */}
                 <View style={styles.section}>
@@ -449,6 +679,247 @@ const createStyles = (colors: ReturnType<typeof useTheme>) =>
         budgetWarningBadge: {
             fontSize: 11,
             fontWeight: '700',
+        },
+        sectionHeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'baseline',
+            justifyContent: 'space-between',
+        },
+        sectionSubtitle: {
+            fontSize: 12,
+            color: colors.textSecondary,
+        },
+        merchantsCard: {
+            backgroundColor: 'transparent',
+            overflow: 'hidden',
+        },
+        merchantRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingVertical: 12,
+            paddingHorizontal: 2,
+        },
+        merchantRowBorder: {
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+        },
+        merchantLeft: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            flex: 1,
+        },
+        merchantIconWrap: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: `${colors.champagne}18`,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        merchantInfo: {
+            gap: 2,
+            flex: 1,
+        },
+        merchantName: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.textPrimary,
+        },
+        merchantBadgeRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 6,
+        },
+        merchantTypeBadge: {
+            backgroundColor: `${colors.champagne}15`,
+            paddingHorizontal: 6,
+            paddingVertical: 1,
+            borderRadius: 4,
+        },
+        merchantTypeText: {
+            fontSize: 10,
+            color: colors.champagne,
+            fontWeight: '600',
+        },
+        merchantTxCount: {
+            fontSize: 11,
+            color: colors.textMuted,
+        },
+        merchantRight: {
+            alignItems: 'flex-end',
+            gap: 2,
+        },
+        merchantAmount: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.textPrimary,
+        },
+        merchantPercent: {
+            fontSize: 11,
+            color: colors.textSecondary,
+        },
+        receivablesCard: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            backgroundColor: 'transparent',
+            borderWidth: StyleSheet.hairlineWidth,
+            borderColor: colors.border,
+            borderRadius: 8,
+            paddingVertical: 12,
+            paddingHorizontal: 12,
+        },
+        receivableCol: {
+            flex: 1,
+            gap: 4,
+        },
+        receivableHeaderRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 5,
+        },
+        receivableLabel: {
+            fontSize: 10,
+            fontWeight: '700',
+            color: colors.textSecondary,
+            letterSpacing: 0.5,
+        },
+        receivableValue: {
+            fontSize: 16,
+            fontWeight: '700',
+        },
+        receivableSub: {
+            fontSize: 10,
+            color: colors.textMuted,
+        },
+        receivableDivider: {
+            width: 1,
+            height: 40,
+            backgroundColor: colors.border,
+            marginHorizontal: 10,
+        },
+        receivableNote: {
+            fontSize: 11,
+            color: colors.textMuted,
+            fontStyle: 'italic',
+            marginTop: 4,
+            paddingHorizontal: 2,
+        },
+        commitmentsCard: {
+            backgroundColor: 'transparent',
+        },
+        commitmentRow: {
+            flexDirection: 'row',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingVertical: 11,
+            paddingHorizontal: 2,
+        },
+        commitmentRowBorder: {
+            borderBottomWidth: StyleSheet.hairlineWidth,
+            borderBottomColor: colors.border,
+        },
+        commitmentLeft: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            flex: 1,
+        },
+        commitmentIconWrap: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: `${colors.champagne}18`,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        commitmentInfo: {
+            flex: 1,
+            gap: 2,
+        },
+        commitmentName: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.textPrimary,
+        },
+        commitmentMeta: {
+            fontSize: 11,
+            color: colors.textSecondary,
+        },
+        commitmentRight: {
+            alignItems: 'flex-end',
+            gap: 3,
+        },
+        commitmentAmount: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.textPrimary,
+        },
+        commitmentStatusBadge: {
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 4,
+        },
+        commitmentStatusText: {
+            fontSize: 10,
+            fontWeight: '700',
+        },
+        telecomCard: {
+            backgroundColor: 'transparent',
+        },
+        telecomPkgRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            paddingVertical: 10,
+            gap: 10,
+        },
+        telecomIconWrap: {
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: `${colors.champagne}18`,
+            alignItems: 'center',
+            justifyContent: 'center',
+        },
+        telecomInfo: {
+            flex: 1,
+            gap: 2,
+        },
+        telecomPkgName: {
+            fontSize: 14,
+            fontWeight: '600',
+            color: colors.textPrimary,
+        },
+        telecomMeta: {
+            fontSize: 11,
+            color: colors.textSecondary,
+        },
+        telecomPrice: {
+            fontSize: 13,
+            fontWeight: '600',
+            color: colors.champagne,
+        },
+        telecomEventRow: {
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingVertical: 7,
+        },
+        telecomEventBorder: {
+            borderTopWidth: StyleSheet.hairlineWidth,
+            borderTopColor: colors.border,
+        },
+        telecomEventDot: {
+            width: 6,
+            height: 6,
+            borderRadius: 3,
+            backgroundColor: colors.champagne,
+        },
+        telecomEventText: {
+            fontSize: 11,
+            color: colors.textSecondary,
+            flex: 1,
         },
         emptyText: {
             fontSize: 13,
