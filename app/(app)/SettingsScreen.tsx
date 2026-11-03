@@ -42,8 +42,10 @@ import useBanKoniStore from '../../store/useBanKoniStore';
 import PrimaryButton from '../../components/common/buttons/PrimaryButton';
 import { validateNewPin } from '../../security/pinSecurity';
 import type { ExportDataPayload } from '../../types/User';
+import AutomaticSmsImport from '../../components/settings/AutomaticSmsImport';
+import ScriptableSmsImport from '../../components/settings/ScriptableSmsImport';
 
-type SectionKey = 'profile' | 'security' | 'preferences' | 'data';
+type SectionKey = 'profile' | 'security' | 'preferences' | 'data' | 'sms';
 
 // Android requires this opt-in for LayoutAnimation on some React Native versions.
 if (
@@ -397,6 +399,16 @@ export default function SettingsScreen() {
                 showsVerticalScrollIndicator={false}
                 keyboardShouldPersistTaps="handled"
             >
+                {renderSection(
+                    'sms',
+                    'Automatic SMS Import',
+                    Platform.OS === 'ios' ? 'Scriptable, Shortcuts, iCloud handoff, and review' : 'On-device import, history, setup, and recovery',
+                    <FolderInput size={22} color={colors.champagne} />,
+                    <>
+                        {Platform.OS !== 'ios' && <AutomaticSmsImport />}
+                        <ScriptableSmsImport />
+                    </>,
+                )}
                 {renderSection(
                     'profile',
                     'Profile',

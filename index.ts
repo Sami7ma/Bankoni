@@ -1,3 +1,5 @@
+import { AppRegistry } from 'react-native';
+import { drainSmsQueue } from './sms/automatic/processor';
 import { registerRootComponent } from 'expo';
 
 import App from './App';
@@ -6,3 +8,5 @@ import App from './App';
 // It also ensures that whether you load the app in Expo Go or in a native build,
 // the environment is set up appropriately
 registerRootComponent(App);
+
+AppRegistry.registerHeadlessTask('BanKoniSmsImport', () => drainSmsQueue);

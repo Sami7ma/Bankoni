@@ -86,6 +86,8 @@ const PROVIDERS: ProviderDefinition[] = [
     {
         providerId: 'cbe',
         strongSignatures: [
+            // CBE's account-debit/fee template can omit its name and arrive from a numeric header.
+            /\ba\s+debit\s+transaction\s+of\s+etb[\s\S]*?has\s+occurred\s+on\s+your\s+account[\s\S]*?service\s+charge/i,
             /\bbanking\s+with\s+cbe\b/i,
             /\bapps\.cbe\.com\.et\b/i,
             /(?<!from\s+)commercial\s+bank\s+of\s+ethiopia\b/i,
