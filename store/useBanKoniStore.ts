@@ -15,6 +15,33 @@ import type { Category } from '../types/Category';
 import type { Budget } from '../types/Budget';
 import type { Wallet } from '../types/Wallet';
 import type { User, ExportDataPayload } from '../types/User';
+import type {
+    Merchant,
+    MerchantRule,
+    EducationInstitution,
+    EducationCommitment,
+    Transfer,
+    RefundAllocation,
+    SharedExpenseWithDetails,
+    LoanWithDetails,
+    LoanRepayment,
+    LoanType,
+    BillConfirmation,
+    TelecomPackage,
+    TelecomEvent,
+    RecurringCommitment,
+    CommitmentStatus,
+    KnownAccount,
+} from '../types/FinancialRelationships';
+import {
+    isEarnedIncome,
+    isPersonalSpending,
+    isRefundTransaction,
+    isReimbursementTransaction,
+    calculatePeriodSummary,
+    calculateCategoryBreakdown,
+} from '../utils/financial';
+import { syncWalletsToKnownAccounts } from '../utils/accountRegistry';
 import {
     initDatabase,
     getActiveUserDB,
@@ -45,6 +72,39 @@ import {
     recordFailedPinAttemptDB,
     resetPinAttemptStateDB,
     updateUserProfileDB,
+    createTransferDB,
+    getTransfersDB,
+    allocateRefundDB,
+    getRefundAllocationsDB,
+    createSharedExpenseDB,
+    allocateReimbursementDB,
+    getSharedExpensesDB,
+    createLoanDB,
+    recordLoanRepaymentDB,
+    getLoansDB,
+    saveMerchantDB,
+    getMerchantsDB,
+    saveMerchantRuleDB,
+    getMerchantRulesDB,
+    saveEducationInstitutionDB,
+    getEducationInstitutionsDB,
+    saveEducationCommitmentDB,
+    getEducationCommitmentsDB,
+    insertBillConfirmationDB,
+    getBillConfirmationsDB,
+    linkBillConfirmationDB,
+    insertTelecomEventDB,
+    getTelecomEventsDB,
+    saveTelecomPackageDB,
+    getTelecomPackagesDB,
+    saveRecurringCommitmentDB,
+    getRecurringCommitmentsDB,
+    updateRecurringCommitmentStatusDB,
+    completeTransferLegDB,
+    getKnownAccountsDB,
+    saveKnownAccountDB,
+    deleteKnownAccountDB,
+    reconcileWalletBalanceDB,
 } from '../db/database';
 
 export type BiometricLoginResult =
@@ -68,6 +128,21 @@ interface BanKoniStore {
     wallets: Wallet[];
     theme: 'light' | 'dark';
 
+    // Financial relationships & intelligence state slices
+    merchants: Merchant[];
+    merchantRules: MerchantRule[];
+    educationInstitutions: EducationInstitution[];
+    educationCommitments: EducationCommitment[];
+    transfers: Transfer[];
+    refundAllocations: RefundAllocation[];
+    sharedExpenses: SharedExpenseWithDetails[];
+    loans: LoanWithDetails[];
+    billConfirmations: BillConfirmation[];
+    telecomEvents: TelecomEvent[];
+    telecomPackages: TelecomPackage[];
+    recurringCommitments: RecurringCommitment[];
+    knownAccounts: KnownAccount[];
+
     // Authentication and security
     checkAuth: () => Promise<void>;
     registerWithPin: (name: string, pin: string, enableBiometrics?: boolean, email?: string) => Promise<void>;
@@ -87,9 +162,11 @@ interface BanKoniStore {
     fetchBudgets: () => Promise<void>;
     fetchCategories: () => Promise<void>;
     fetchWallets: (includeArchived?: boolean) => Promise<void>;
+    fetchFinancialRelationships: () => Promise<void>;
+    fetchKnownAccounts: () => Promise<void>;
 
     // Transaction CRUD
-    addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'> | Transaction) => Promise<void>;
+    addTransaction: (tx: Omit<Transaction, 'id' | 'createdAt'> | Transaction, smsMessageKey?: string) => Promise<void>;
     updateTransaction: (id: string, updated: Partial<Omit<Transaction, 'id' | 'createdAt'>>) => Promise<void>;
     deleteTransaction: (id: string) => Promise<void>;
 
@@ -106,6 +183,56 @@ interface BanKoniStore {
     setDefaultWallet: (id: string) => Promise<void>;
     archiveWallet: (id: string, isArchived: boolean) => Promise<void>;
     deleteWallet: (id: string) => Promise<void>;
+
+    // Financial relationship actions
+    createTransfer: (params: {
+        fromWalletId: string;
+        toWalletId: string;
+        amount: number;
+        feeAmount?: number;
+        note?: string;
+        date?: string;
+        fromSmsReference?: string;
+        toSmsReference?: string;
+        fromRawSms?: string;
+        toRawSms?: string;
+        reconciledFromBalance?: number;
+        reconciledToBalance?: number;
+        source?: 'manual' | 'sms';
+    }) => Promise<Transfer>;
+    completeTransferLeg: (params: {
+        existingTransactionId: string;
+        newLeg: {
+            walletId: string;
+            type: 'DEBIT' | 'CREDIT';
+            amount: number;
+            feeAmount?: number;
+            smsReference?: string;
+            rawSms?: string;
+            currentBalance?: number;
+            date?: string;
+            note?: string;
+        };
+        note?: string;
+    }) => Promise<Transfer>;
+    saveKnownAccount: (account: KnownAccount) => Promise<KnownAccount>;
+    deleteKnownAccount: (id: string) => Promise<void>;
+    reconcileWalletBalance: (walletId: string, currentBalance: number) => Promise<void>;
+    allocateRefund: (params: { refundTransactionId: string; originalTransactionId?: string; allocatedAmount: number; notes?: string }) => Promise<RefundAllocation>;
+    createSharedExpense: (params: { transactionId: string; totalAmount: number; personalShare: number; description?: string; participants: Array<{ name: string; expectedAmount: number }> }) => Promise<SharedExpenseWithDetails>;
+    allocateReimbursement: (params: { reimbursementTransactionId: string; sharedExpenseId: string; participantId?: string; allocatedAmount: number }) => Promise<void>;
+    createLoan: (params: { type: LoanType; counterparty: string; principalAmount: number; walletId?: string; createTransaction?: boolean; interestRate?: number; dueDate?: string; notes?: string }) => Promise<LoanWithDetails>;
+    recordLoanRepayment: (params: { loanId: string; principalRepaid: number; interestPaid?: number; feePaid?: number; walletId?: string; createTransaction?: boolean; repaymentDate: string; notes?: string }) => Promise<LoanRepayment>;
+    saveMerchant: (merchant: Omit<Merchant, 'createdAt'> & { createdAt?: string }) => Promise<Merchant>;
+    saveMerchantRule: (rule: Omit<MerchantRule, 'createdAt'> & { createdAt?: string }) => Promise<MerchantRule>;
+    saveEducationInstitution: (inst: Omit<EducationInstitution, 'createdAt'> & { createdAt?: string }) => Promise<EducationInstitution>;
+    saveEducationCommitment: (comm: Omit<EducationCommitment, 'createdAt'> & { createdAt?: string }) => Promise<EducationCommitment>;
+    insertBillConfirmation: (conf: Omit<BillConfirmation, 'createdAt'> & { createdAt?: string }) => Promise<BillConfirmation>;
+    linkBillConfirmation: (confirmationId: string, transactionId: string) => Promise<void>;
+    insertTelecomEvent: (event: Omit<TelecomEvent, 'createdAt'> & { createdAt?: string }) => Promise<TelecomEvent>;
+    saveTelecomPackage: (pkg: Omit<TelecomPackage, 'createdAt'> & { createdAt?: string }) => Promise<TelecomPackage>;
+    saveRecurringCommitment: (comm: Omit<RecurringCommitment, 'createdAt'> & { createdAt?: string }) => Promise<RecurringCommitment>;
+    updateRecurringCommitmentStatus: (id: string, status: CommitmentStatus) => Promise<void>;
 
     // Export & Import
     exportDataToJSONFile: () => Promise<string | null>;
@@ -136,13 +263,65 @@ function makeId(prefix: string): string {
 }
 
 async function readAllFinancialData() {
-    const [transactions, categories, budgets, wallets] = await Promise.all([
+    const [
+        transactions,
+        categories,
+        budgets,
+        wallets,
+        merchants,
+        merchantRules,
+        educationInstitutions,
+        educationCommitments,
+        transfers,
+        refundAllocations,
+        sharedExpenses,
+        loans,
+        billConfirmations,
+        telecomEvents,
+        telecomPackages,
+        recurringCommitments,
+        knownAccountsRaw,
+    ] = await Promise.all([
         getTransactionsDB(),
         getCategoriesDB(),
         getBudgetsDB(),
         getWalletsDB(),
+        getMerchantsDB(),
+        getMerchantRulesDB(),
+        getEducationInstitutionsDB(),
+        getEducationCommitmentsDB(),
+        getTransfersDB(),
+        getRefundAllocationsDB(),
+        getSharedExpensesDB(),
+        getLoansDB(),
+        getBillConfirmationsDB(),
+        getTelecomEventsDB(),
+        getTelecomPackagesDB(),
+        getRecurringCommitmentsDB(),
+        getKnownAccountsDB(),
     ]);
-    return { transactions, categories, budgets, wallets };
+
+    const knownAccounts = syncWalletsToKnownAccounts(wallets, knownAccountsRaw);
+
+    return {
+        transactions,
+        categories,
+        budgets,
+        wallets,
+        merchants,
+        merchantRules,
+        educationInstitutions,
+        educationCommitments,
+        transfers,
+        refundAllocations,
+        sharedExpenses,
+        loans,
+        billConfirmations,
+        telecomEvents,
+        telecomPackages,
+        recurringCommitments,
+        knownAccounts,
+    };
 }
 
 async function readTransactionsAndWallets() {
@@ -171,6 +350,19 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
     categories: [],
     budgets: [],
     wallets: [],
+    merchants: [],
+    merchantRules: [],
+    educationInstitutions: [],
+    educationCommitments: [],
+    transfers: [],
+    refundAllocations: [],
+    sharedExpenses: [],
+    loans: [],
+    billConfirmations: [],
+    telecomEvents: [],
+    telecomPackages: [],
+    recurringCommitments: [],
+    knownAccounts: [],
     theme: (Appearance.getColorScheme() === 'dark' ? 'dark' : 'light') as 'light' | 'dark',
 
     // Discover the vault and device capabilities. A single screen owns the actual
@@ -185,6 +377,18 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
             categories: [],
             budgets: [],
             wallets: [],
+            merchants: [],
+            merchantRules: [],
+            educationInstitutions: [],
+            educationCommitments: [],
+            transfers: [],
+            refundAllocations: [],
+            sharedExpenses: [],
+            loans: [],
+            billConfirmations: [],
+            telecomEvents: [],
+            telecomPackages: [],
+            recurringCommitments: [],
         });
         try {
             await initDatabase();
@@ -380,6 +584,18 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
             categories: [],
             budgets: [],
             wallets: [],
+            merchants: [],
+            merchantRules: [],
+            educationInstitutions: [],
+            educationCommitments: [],
+            transfers: [],
+            refundAllocations: [],
+            sharedExpenses: [],
+            loans: [],
+            billConfirmations: [],
+            telecomEvents: [],
+            telecomPackages: [],
+            recurringCommitments: [],
             dataError: null,
             isLoadingData: false,
         });
@@ -423,14 +639,57 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
     fetchBudgets: async () => set({ budgets: await getBudgetsDB() }),
     fetchCategories: async () => set({ categories: await getCategoriesDB() }),
     fetchWallets: async (includeArchived?: boolean) => set({ wallets: await getWalletsDB(includeArchived ?? true) }),
+    fetchFinancialRelationships: async () => {
+        const [
+            merchants,
+            merchantRules,
+            educationInstitutions,
+            educationCommitments,
+            transfers,
+            refundAllocations,
+            sharedExpenses,
+            loans,
+            billConfirmations,
+            telecomEvents,
+            telecomPackages,
+            recurringCommitments,
+        ] = await Promise.all([
+            getMerchantsDB(),
+            getMerchantRulesDB(),
+            getEducationInstitutionsDB(),
+            getEducationCommitmentsDB(),
+            getTransfersDB(),
+            getRefundAllocationsDB(),
+            getSharedExpensesDB(),
+            getLoansDB(),
+            getBillConfirmationsDB(),
+            getTelecomEventsDB(),
+            getTelecomPackagesDB(),
+            getRecurringCommitmentsDB(),
+        ]);
+        set({
+            merchants,
+            merchantRules,
+            educationInstitutions,
+            educationCommitments,
+            transfers,
+            refundAllocations,
+            sharedExpenses,
+            loans,
+            billConfirmations,
+            telecomEvents,
+            telecomPackages,
+            recurringCommitments,
+        });
+    },
 
-    addTransaction: async (tx) => {
+    addTransaction: async (tx, smsMessageKey) => {
         const fullTransaction: Transaction = {
             ...tx,
             id: 'id' in tx && tx.id ? tx.id : makeId('tx'),
             createdAt: 'createdAt' in tx && tx.createdAt ? tx.createdAt : new Date().toISOString(),
         };
-        await insertTransactionDB(fullTransaction);
+        await insertTransactionDB(fullTransaction, smsMessageKey);
         const data = await readTransactionsAndWallets();
         set(data);
     },
@@ -583,6 +842,156 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
         set({ wallets: await getWalletsDB() });
     },
 
+    createTransfer: async (params) => {
+        const transfer = await createTransferDB(params);
+        const data = await readTransactionsAndWallets();
+        const transfers = await getTransfersDB();
+        set({ ...data, transfers });
+        return transfer;
+    },
+
+    completeTransferLeg: async (params) => {
+        const transfer = await completeTransferLegDB(params);
+        const data = await readTransactionsAndWallets();
+        const transfers = await getTransfersDB();
+        set({ ...data, transfers });
+        return transfer;
+    },
+
+    fetchKnownAccounts: async () => {
+        const raw = await getKnownAccountsDB();
+        const synced = syncWalletsToKnownAccounts(get().wallets, raw);
+        set({ knownAccounts: synced });
+    },
+
+    saveKnownAccount: async (account) => {
+        const saved = await saveKnownAccountDB(account);
+        const raw = await getKnownAccountsDB();
+        const synced = syncWalletsToKnownAccounts(get().wallets, raw);
+        set({ knownAccounts: synced });
+        return saved;
+    },
+
+    deleteKnownAccount: async (id) => {
+        await deleteKnownAccountDB(id);
+        const raw = await getKnownAccountsDB();
+        const synced = syncWalletsToKnownAccounts(get().wallets, raw);
+        set({ knownAccounts: synced });
+    },
+
+    reconcileWalletBalance: async (walletId, currentBalance) => {
+        await reconcileWalletBalanceDB(walletId, currentBalance);
+        const wallets = await getWalletsDB();
+        set({ wallets });
+    },
+
+    allocateRefund: async (params) => {
+        const allocation = await allocateRefundDB(params);
+        const [transactions, refundAllocations] = await Promise.all([
+            getTransactionsDB(),
+            getRefundAllocationsDB(),
+        ]);
+        set({ transactions, refundAllocations });
+        return allocation;
+    },
+
+    createSharedExpense: async (params) => {
+        const se = await createSharedExpenseDB(params);
+        const [transactions, sharedExpenses] = await Promise.all([
+            getTransactionsDB(),
+            getSharedExpensesDB(),
+        ]);
+        set({ transactions, sharedExpenses });
+        return se;
+    },
+
+    allocateReimbursement: async (params) => {
+        await allocateReimbursementDB(params);
+        const [transactions, sharedExpenses] = await Promise.all([
+            getTransactionsDB(),
+            getSharedExpensesDB(),
+        ]);
+        set({ transactions, sharedExpenses });
+    },
+
+    createLoan: async (params) => {
+        const loan = await createLoanDB(params);
+        const [data, loans] = await Promise.all([
+            readTransactionsAndWallets(),
+            getLoansDB(),
+        ]);
+        set({ ...data, loans });
+        return loan;
+    },
+
+    recordLoanRepayment: async (params) => {
+        const rep = await recordLoanRepaymentDB(params);
+        const [data, loans] = await Promise.all([
+            readTransactionsAndWallets(),
+            getLoansDB(),
+        ]);
+        set({ ...data, loans });
+        return rep;
+    },
+
+    saveMerchant: async (merchant) => {
+        const saved = await saveMerchantDB(merchant);
+        set({ merchants: await getMerchantsDB() });
+        return saved;
+    },
+
+    saveMerchantRule: async (rule) => {
+        const saved = await saveMerchantRuleDB(rule);
+        set({ merchantRules: await getMerchantRulesDB() });
+        return saved;
+    },
+
+    saveEducationInstitution: async (inst) => {
+        const saved = await saveEducationInstitutionDB(inst);
+        set({ educationInstitutions: await getEducationInstitutionsDB() });
+        return saved;
+    },
+
+    saveEducationCommitment: async (comm) => {
+        const saved = await saveEducationCommitmentDB(comm);
+        set({ educationCommitments: await getEducationCommitmentsDB() });
+        return saved;
+    },
+
+    insertBillConfirmation: async (conf) => {
+        const saved = await insertBillConfirmationDB(conf);
+        set({ billConfirmations: await getBillConfirmationsDB() });
+        return saved;
+    },
+
+    linkBillConfirmation: async (confirmationId, transactionId) => {
+        await linkBillConfirmationDB(confirmationId, transactionId);
+        set({ billConfirmations: await getBillConfirmationsDB() });
+    },
+
+    insertTelecomEvent: async (event) => {
+        const saved = await insertTelecomEventDB(event);
+        set({ telecomEvents: await getTelecomEventsDB() });
+        return saved;
+    },
+
+    saveTelecomPackage: async (pkg) => {
+        const saved = await saveTelecomPackageDB(pkg);
+        set({ telecomPackages: await getTelecomPackagesDB() });
+        return saved;
+    },
+
+    saveRecurringCommitment: async (comm) => {
+        const saved = await saveRecurringCommitmentDB(comm);
+        set({ recurringCommitments: await getRecurringCommitmentsDB() });
+        return saved;
+    },
+
+    updateRecurringCommitmentStatus: async (id, status) => {
+        await updateRecurringCommitmentStatusDB(id, status);
+        set({ recurringCommitments: await getRecurringCommitmentsDB() });
+    },
+
     getExportPayload: async () => {
         const [themePref, budgetAlertsPref, popupAlertsPref, alertThresholdPref] = await Promise.all([
             SecureStore.getItemAsync('bankoni_theme'),
@@ -687,14 +1096,22 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
     },
 
     totalIncome: () => getEtbClearedTransactions(get()).reduce(
-        (sum, transaction) => sum + (transaction.type === 'CREDIT' ? transaction.amount : 0),
+        (sum, transaction) => sum + (isEarnedIncome(transaction) ? transaction.amount : 0),
         0,
     ),
 
-    totalExpenses: () => getEtbClearedTransactions(get()).reduce(
-        (sum, transaction) => sum + (transaction.type === 'DEBIT' ? transaction.amount : 0),
-        0,
-    ),
+    totalExpenses: () => {
+        const txs = getEtbClearedTransactions(get());
+        let gross = 0;
+        let refunds = 0;
+        let reimbursements = 0;
+        for (const tx of txs) {
+            if (isPersonalSpending(tx)) gross += tx.amount;
+            else if (isRefundTransaction(tx)) refunds += tx.amount;
+            else if (isReimbursementTransaction(tx)) reimbursements += tx.amount;
+        }
+        return Math.max(0, Number((gross - refunds - reimbursements).toFixed(2)));
+    },
 
     totalBalance: () => get().wallets
         .filter((wallet) => wallet.currency === 'ETB' && !wallet.isArchived)
@@ -702,7 +1119,7 @@ const useBanKoniStore = create<BanKoniStore>((set, get) => ({
 
     transactionByCategory: () => getEtbClearedTransactions(get()).reduce<Record<string, number>>(
         (totals, transaction) => {
-            if (transaction.type === 'DEBIT') {
+            if (isPersonalSpending(transaction)) {
                 totals[transaction.categoryId] = (totals[transaction.categoryId] ?? 0) + transaction.amount;
             }
             return totals;

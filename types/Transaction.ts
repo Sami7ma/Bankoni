@@ -25,6 +25,12 @@ export interface Transaction {
     smsFingerprint?: string;      // Deterministic deduplication hash
     isTransfer?: boolean;         // True if verified internal transfer between user's own wallets
     transferWalletId?: string;   // Paired destination or source wallet ID
+    subType?: 'STANDARD' | 'TRANSFER' | 'REFUND' | 'REIMBURSEMENT' | 'SHARED_EXPENSE' | 'LOAN_DISBURSEMENT' | 'LOAN_REPAYMENT' | 'FEE' | 'INTEREST';
+    counterparty?: string;        // Recipient, merchant, or counterparty name
+    merchantId?: string;          // Linked Merchant ID if recognized
+    educationInstitutionId?: string; // Linked Education Institution ID if recognized
+    feeAmount?: number;           // Explicit transaction service fee
+    vatAmount?: number;           // Explicit transaction VAT
     createdAt: string;            // When was this record created?
 }
 
