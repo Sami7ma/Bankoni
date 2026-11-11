@@ -1,13 +1,16 @@
 {
   "name": "bankoni-mobile",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "./index",
   "scripts": {
     "start": "expo start",
     "start:clean": "expo start -c",
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "build:web": "expo export --platform web --max-workers 2 && node scripts/build-pwa.cjs",
+    "preview:web": "node scripts/serve-pwa.cjs",
+    "test:web": "playwright test",
     "test": "jest",
     "typecheck": "tsc --noEmit",
     "sms:bundle": "node scripts/build-sms-engine.cjs"
@@ -32,6 +35,7 @@
     "expo-status-bar": "~58.0.4",
     "lucide-react-native": "^0.503.0",
     "react": "19.3.0",
+    "react-dom": "^19.3.0",
     "react-native": "0.88.0",
     "react-native-calendars": "^1.1314.0",
     "react-native-chart-kit": "^7.0.2",
@@ -40,16 +44,22 @@
     "react-native-safe-area-context": "~5.10.1",
     "react-native-screens": "~4.30.0",
     "react-native-svg": "15.16.0",
+    "react-native-web": "^0.21.4",
     "react-native-worklets": "0.13.0",
+    "sql.js": "^1.15.2",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
     "@babel/core": "7.29.7",
     "@babel/plugin-transform-modules-commonjs": "7.29.7",
     "@babel/preset-typescript": "7.29.7",
+    "@playwright/test": "^1.64.1",
     "@types/jest": "^30.0.0",
     "@types/react": "~19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/sql.js": "^1.4.11",
     "expo-doctor": "^1.21.5",
+    "fake-indexeddb": "^6.2.7",
     "jest": "^30.5.2",
     "typescript": "~6.0.3"
   },
