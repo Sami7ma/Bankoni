@@ -42,6 +42,8 @@ yarn-error.*
 
 # test and temporary output
 coverage/
+/playwright-report/
+/test-results/
 /docs/verification/
 *.tmp
 *.temp

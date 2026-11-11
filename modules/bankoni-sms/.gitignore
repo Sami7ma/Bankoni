@@ -1,0 +1,5 @@
+android/build/
+android/.gradle/
+android/.cxx/
+android/.kotlin/
+ios/build/
