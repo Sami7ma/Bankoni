@@ -21,6 +21,7 @@ export interface UserPreferencesPayload {
 }
 
 export interface ExportDataPayload {
+    selection?: import('../db/backupSelection').ExportSelection;
     version: string;
     exportedAt: string;
     user: User | null;
@@ -39,4 +40,6 @@ export interface ExportDataPayload {
     };
 
     settings?: UserPreferencesPayload;
+    /** Version 2 portable financial snapshot. Never includes users or auth credentials. */
+    financialTables?: import('../db/portableBackup').FinancialSnapshot;
 }
