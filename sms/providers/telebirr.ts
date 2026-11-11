@@ -277,6 +277,7 @@ export function parseTelebirrSms(rawText: string): SmsParseResult {
     }
 
     // --- RESILIENT UNIVERSAL FALLBACK FOR TELEBIRR ---
+    warnings.push('Unrecognized template: amount and direction require manual confirmation.');
     // Handles unstructured messages, merchant notifications, USSD receipts,
     // or partial SMS clips (e.g. "Zelalem(2519****9789) on 23/10/2026 17:22:20. Your transaction number is DJN07Y99ZQ. Your current E-Money Account balance is ETB 103.83. Thank you for using telebirr Ethio telecom")
     const reference = extractTelebirrReference(text);
@@ -346,6 +347,7 @@ export function parseTelebirrSms(rawText: string): SmsParseResult {
     const accountIdentifier = phoneMatch ? phoneMatch[1] : undefined;
 
     const candidate: ParsedTransactionCandidate = {
+        automaticEligible: false,
         providerId: 'telebirr',
         type: direction.type,
         principalAmount: santimToEtb(principalSantim),

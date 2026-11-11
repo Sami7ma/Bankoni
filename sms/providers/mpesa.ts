@@ -246,6 +246,7 @@ export function parseMpesaSms(rawText: string): SmsParseResult {
     }
 
     // --- RESILIENT UNIVERSAL FALLBACK FOR M-PESA ---
+    warnings.push('Unrecognized template: amount and direction require manual confirmation.');
     // Automatically extracts direction (debited vs credited), reference, balance, timestamp, and amount
     const reference = extractMpesaReference(text);
     const currentBalance = extractMpesaBalance(text);
@@ -276,6 +277,7 @@ export function parseMpesaSms(rawText: string): SmsParseResult {
             : (direction.type === 'CREDIT' ? 'M-PESA Received' : 'M-PESA Payment');
 
         const candidate: ParsedTransactionCandidate = {
+            automaticEligible: false,
             providerId: 'mpesa',
             type: direction.type,
             principalAmount: santimToEtb(principalSantim),

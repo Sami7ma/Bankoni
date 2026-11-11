@@ -129,23 +129,14 @@ describe('Telebirr SMS Parser', () => {
         expect(candidate.currentBalance).toBe(103.83);
     });
 
-    it('resiliently parses real-world partial Telebirr clip without throwing parse errors', () => {
+    it('does not turn a partial Telebirr clip containing only the remaining balance into an expense', () => {
         const sms =
             'Zelalem(2519****9789) on 23/10/2026 17:22:20. Your transaction number is DJN07Y99ZQ. ' +
             'Your current E-Money Account balance is ETB 103.83. Thank you for using telebirr Ethio telecom';
 
         const result = parseSms(sms);
-        expect(result.status).toBe('parsed');
-        if (result.status !== 'parsed') return;
-
-        const { candidate } = result;
-        expect(candidate.providerId).toBe('telebirr');
-        expect(candidate.type).toBe('DEBIT');
-        expect(candidate.counterparty).toBe('Zelalem(2519****9789)');
-        expect(candidate.reference).toBe('DJN07Y99ZQ');
-        expect(candidate.dateTime).toBe('2026-10-23T17:22:20+03:00');
-        expect(candidate.currentBalance).toBe(103.83);
-        expect(candidate.warnings.length).toBeGreaterThan(0);
+        expect(result.status).toBe('non_transaction');
+        if (result.status === 'non_transaction') expect(result.messageType).toBe('balance_only');
     });
 
     it('detects debited vs credited directions accurately in Telebirr notifications', () => {

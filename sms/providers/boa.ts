@@ -120,6 +120,7 @@ export function parseBoaSms(rawText: string): SmsParseResult {
         const candidate: ParsedTransactionCandidate = {
             providerId: 'boa',
             type: 'CREDIT',
+            automaticEligible: false,
             principalAmount: santimToEtb(principalSantim),
             ledgerAmount: santimToEtb(principalSantim),
             isLedgerAmountDerived: false,
