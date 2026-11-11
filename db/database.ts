@@ -1,8 +1,13 @@
 // Local-first SQLite repository for BanKoni.
 // Production startup intentionally does not insert sample transactions or budgets.
 
-import * as SQLite from 'expo-sqlite';
+import {mergeSelectedTables} from './backupSelection';
+import type * as SQLite from 'expo-sqlite';
+import { createDatabaseOwner } from './platform';
+import { exportFinancialTables, restoreFinancialTables, FINANCIAL_TABLES } from './portableBackup';
+import { isEarnedIncome, isPersonalSpending } from '../utils/financial';
 import { transactionInsert } from './transactionSql';
+import { LEDGER_COLUMNS, LEDGER_INTEGRITY_SQL, ledgerBalance, cbeBalanceEvidence, CBE_BALANCE_SCHEMA } from './ledgerIntegrity';
 import { COMPANION_INBOX_SCHEMA, type InboxRow } from '../sms/companion/schema';
 import { RECEIPTS_SCHEMA, duplicateQuery, type ImportPlan } from '../sms/automatic/plan';
 import type { Transaction } from '../types/Transaction';
@@ -37,14 +42,11 @@ import type {
     KnownAccount,
 } from '../types/FinancialRelationships';
 import { defaultCategories, defaultIncomeCategories } from '../constants/defaultCategories';
-import { DatabaseConnectionOwner, type DatabaseReader } from './connectionOwner';
+import type { DatabaseReader } from './connectionOwner';
 
-const DB_NAME = 'bankoni.db';
-const DATABASE_VERSION = 3;
+const DATABASE_VERSION = 7;
 
-const connectionOwner = new DatabaseConnectionOwner(
-    () => SQLite.openDatabaseAsync(DB_NAME, { useNewConnection: true }),
-);
+const connectionOwner = createDatabaseOwner();
 let initPromise: Promise<void> | null = null;
 
 interface UserRow {
@@ -57,6 +59,14 @@ interface UserRow {
 }
 
 interface TransactionRow {
+    sms_details?: string | null;
+    amount_minor?: number | null;
+    occurred_at?: number | null;
+    received_at?: number | null;
+    imported_at?: number | null;
+    date_source?: Transaction['dateSource'] | null;
+    date_precision?: Transaction['datePrecision'] | null;
+    event_date?: string | null;
     id: string;
     amount: number;
     type: 'CREDIT' | 'DEBIT';
@@ -109,6 +119,9 @@ interface WalletRow {
     name: string;
     icon: string;
     provider_id: string | null;
+    balance_mode?: string;
+    bank_balance_as_of?: number;
+    bank_balance_date_source?: string;
     opening_balance: number | null;
     balance: number;
     currency: string;
@@ -511,6 +524,7 @@ async function ensureColumnsExist(db: SQLite.SQLiteDatabase): Promise<void> {
         if (!walletCols.has('provider_id')) {
             await db.runAsync("ALTER TABLE wallets ADD COLUMN provider_id TEXT NOT NULL DEFAULT 'custom';");
         }
+        if (!walletCols.has('balance_mode')) await db.runAsync("ALTER TABLE wallets ADD COLUMN balance_mode TEXT NOT NULL DEFAULT 'ledger';");
         if (!walletCols.has('opening_balance')) {
             await db.runAsync('ALTER TABLE wallets ADD COLUMN opening_balance REAL NOT NULL DEFAULT 0.0;');
         }
@@ -536,6 +550,9 @@ async function ensureColumnsExist(db: SQLite.SQLiteDatabase): Promise<void> {
     // Transactions table
     const txCols = await getCols('transactions');
     if (txCols.size > 0) {
+        for (const [column, type] of Object.entries(LEDGER_COLUMNS)) {
+            if (!txCols.has(column)) await db.runAsync(`ALTER TABLE transactions ADD COLUMN ${column} ${type};`);
+        }
         if (!txCols.has('wallet_id')) {
             await db.runAsync("ALTER TABLE transactions ADD COLUMN wallet_id TEXT NOT NULL DEFAULT 'wallet-cash-default' REFERENCES wallets(id);");
         }
@@ -613,6 +630,8 @@ export function initDatabase(): Promise<void> {
 
 async function initializeDatabase(): Promise<void> {
     await connectionOwner.withExclusiveTransaction(async (tx) => {
+        const version = await tx.getFirstAsync<{user_version:number}>('PRAGMA user_version;');
+        if ((version?.user_version ?? 0) > DATABASE_VERSION) throw Error('This vault was created by a newer BanKoni version. Update the app before opening it.');
         // 1. Create base tables if they don't already exist
         await tx.execAsync(CREATE_TABLES_SQL);
         await tx.execAsync(RECEIPTS_SCHEMA);
@@ -638,7 +657,10 @@ async function initializeDatabase(): Promise<void> {
         await normalizeDefaultWallet(tx);
         await seedInitialData(tx);
 
-        // 6. Version 3 adds a Scriptable evidence inbox; financial tables stay unchanged.
+        await tx.execAsync(CBE_BALANCE_SCHEMA);
+        await tx.execAsync(LEDGER_INTEGRITY_SQL);
+
+        // Version 4 retains event/receive/import provenance and enforces integer ledger balances.
         await tx.execAsync(`PRAGMA user_version = ${DATABASE_VERSION};`);
     });
 }
@@ -727,6 +749,13 @@ function mapTransaction(row: TransactionRow): Transaction {
     return {
         id: row.id,
         amount: Number(row.amount),
+        amountMinor: row.amount_minor ?? Math.round(Number(row.amount) * 100),
+        occurredAt: row.occurred_at ?? undefined,
+        receivedAt: row.received_at ?? undefined,
+        importedAt: row.imported_at ?? undefined,
+        dateSource: row.date_source ?? undefined,
+        datePrecision: row.date_precision ?? undefined,
+        eventDate: row.event_date ?? undefined,
         type: row.type,
         categoryId: row.category_id,
         note: row.note || '',
@@ -737,6 +766,7 @@ function mapTransaction(row: TransactionRow): Transaction {
         source: (row.source as 'manual' | 'sms') || 'manual',
         smsReference: row.sms_reference || undefined,
         smsFingerprint: row.sms_fingerprint || undefined,
+        smsDetails: row.sms_details ? JSON.parse(row.sms_details) : undefined,
         isTransfer: Boolean(row.is_transfer),
         transferWalletId: row.transfer_wallet_id || undefined,
         subType: (row.sub_type as Transaction['subType']) || 'STANDARD',
@@ -786,6 +816,7 @@ function mapWallet(row: WalletRow): Wallet {
         name: row.name,
         icon: row.icon,
         providerId: row.provider_id || 'custom',
+        ...(row.balance_mode==='cbe_sms' ? {balanceMode:'cbe_sms' as const,...(row.bank_balance_as_of?{bankBalanceAsOf:row.bank_balance_as_of,bankBalanceDateSource:row.bank_balance_date_source}:{})}:{}),
         openingBalance: Number(row.opening_balance ?? 0),
         balance: Number(row.balance ?? 0),
         currency: row.currency,
@@ -801,9 +832,25 @@ function isValidDate(value: string): boolean {
 }
 
 function assertValidTransaction(tx: Transaction): void {
+    if(tx.smsDetails) {
+        const d=tx.smsDetails;
+        const values=[d.principalMinor,d.feeMinor,d.ledgerMinor,...Object.values(d.chargesMinor)];
+        if(d.provider!=='cbe' || d.currency!=='ETB' || d.walletId!==tx.walletId || d.direction!==tx.type || !d.senderId.trim() || !/^\d{4}$/.test(d.accountLast4)
+            || values.some(v=>!Number.isSafeInteger(v) || v<0) || d.principalMinor<=0
+            || Object.values(d.chargesMinor).reduce((sum,n)=>sum+n,0)!==d.feeMinor
+            || d.ledgerMinor!==d.principalMinor+(d.direction==='DEBIT' ? d.feeMinor:0)
+            || Math.round(tx.amount*100)!==(tx.subType==='FEE' ? d.feeMinor:d.principalMinor))throw Error('CBE financial provenance disagrees with ledger fields.');
+    }
     if (!Number.isFinite(tx.amount) || tx.amount <= 0) {
         throw new Error('Transaction amount must be a finite number greater than zero.');
     }
+    const minor = Math.round(tx.amount * 100);
+    if (!Number.isSafeInteger(minor) || minor <= 0 || Math.abs(tx.amount * 100 - minor) > 0.00001) throw Error('Transaction amount must be an exact positive number of santim.');
+    if (tx.amountMinor != null && tx.amountMinor !== minor) throw Error('Transaction monetary representations disagree.');
+    if (tx.datePrecision != null && !['day','minute','second','millisecond'].includes(tx.datePrecision)) throw Error('Invalid date precision.');
+    if (tx.datePrecision === 'day' && (!tx.eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(tx.eventDate) || !isValidDate(tx.eventDate) || new Date(tx.eventDate).toISOString().slice(0,10) !== tx.eventDate)) throw Error('A real calendar date is required for date-only transactions.');
+    if (tx.datePrecision !== 'day' && tx.eventDate != null) throw Error('Calendar date is only valid for date-only transactions.');
+    if (tx.occurredAt != null && tx.occurredAt !== Date.parse(tx.date)) throw Error('Transaction event dates disagree.');
     if (tx.type !== 'CREDIT' && tx.type !== 'DEBIT') {
         throw new Error('Transaction type must be CREDIT or DEBIT.');
     }
@@ -829,11 +876,12 @@ async function assertTransactionReferences(db: SQLite.SQLiteDatabase, tx: Transa
         throw new Error(`A ${tx.type === 'DEBIT' ? 'debit' : 'credit'} must use an ${expectedFlow.toLowerCase()} category.`);
     }
 
-    const wallet = await db.getFirstAsync<{ id: string }>(
-        'SELECT id FROM wallets WHERE id = ?;',
+    const wallet = await db.getFirstAsync<{ id: string;provider_id:string;currency:string;account_number_last4:string;is_archived:number }>(
+        'SELECT id,provider_id,currency,account_number_last4,is_archived FROM wallets WHERE id = ?;',
         [tx.walletId],
     );
     if (!wallet) throw new Error('The selected wallet no longer exists.');
+    if(tx.smsDetails && (wallet.provider_id!=='cbe' || wallet.currency!=='ETB' || wallet.is_archived || wallet.account_number_last4!==tx.smsDetails.accountLast4))throw Error('CBE provider/account/currency authorization no longer matches.');
 }
 
 async function assertBudgetCategory(db: SQLite.SQLiteDatabase, budget: Budget): Promise<void> {
@@ -1003,7 +1051,7 @@ export async function resetPinAttemptStateDB(): Promise<void> {
 export async function getTransactionsDB(): Promise<Transaction[]> {
     const db = await getDatabase();
     const rows = await db.getAllAsync<TransactionRow>(
-        'SELECT * FROM transactions ORDER BY date DESC, created_at DESC;',
+        'SELECT * FROM transactions ORDER BY occurred_at DESC, imported_at DESC, id DESC;',
     );
     return rows.map(mapTransaction);
 }
@@ -1012,6 +1060,8 @@ export async function insertTransactionDB(tx: Transaction, smsMessageKey?: strin
     assertValidTransaction(tx);
     await withExclusiveTransaction(async (db) => {
         await assertTransactionReferences(db, tx);
+        const account=await db.getFirstAsync<{provider_id:string}>('SELECT provider_id FROM wallets WHERE id=?',[tx.walletId]);
+        if(tx.source==='sms' && account?.provider_id==='cbe')throw Error('CBE SMS writes require the shared validated import plan.');
 
         if (smsMessageKey && await db.getFirstAsync('SELECT message_key FROM sms_import_receipts WHERE message_key=?;', [smsMessageKey])) {
             throw new Error('This message has already been imported.');
@@ -1098,7 +1148,7 @@ export async function updateTransactionDB(
     if (updated.type !== undefined) { fields.push('type = ?'); values.push(updated.type); }
     if (updated.categoryId !== undefined) { fields.push('category_id = ?'); values.push(updated.categoryId); }
     if (updated.note !== undefined) { fields.push('note = ?'); values.push(updated.note); }
-    if (updated.date !== undefined) { fields.push('date = ?'); values.push(updated.date); }
+    if (updated.date !== undefined) { fields.push('date = ?', 'date_source = ?', 'date_precision = ?', 'event_date = ?'); values.push(updated.date, 'manual', updated.datePrecision ?? 'second', updated.eventDate ?? null); }
     if (updated.status !== undefined) { fields.push('status = ?'); values.push(updated.status); }
     if (updated.walletId !== undefined) { fields.push('wallet_id = ?'); values.push(updated.walletId); }
     if (updated.currentBalance !== undefined) { fields.push('current_balance = ?'); values.push(updated.currentBalance); }
@@ -1120,7 +1170,12 @@ export async function updateTransactionDB(
         if (!oldRow) throw new Error('Transaction not found. It may already have been deleted.');
 
         const oldTransaction = mapTransaction(oldRow);
-        const nextTransaction: Transaction = { ...oldTransaction, ...updated };
+        const nextTransaction: Transaction = { ...oldTransaction, ...updated,
+            amountMinor: updated.amount != null ? Math.round(updated.amount * 100) : oldTransaction.amountMinor,
+            dateSource: updated.date != null ? 'manual' : oldTransaction.dateSource,
+            datePrecision: updated.date != null ? (updated.datePrecision ?? 'second') : oldTransaction.datePrecision,
+            eventDate: updated.date != null ? updated.eventDate : oldTransaction.eventDate,
+            occurredAt: updated.date != null ? Date.parse(updated.date) : oldTransaction.occurredAt };
         assertValidTransaction(nextTransaction);
         await assertTransactionReferences(db, nextTransaction);
 
@@ -1297,8 +1352,8 @@ export async function deleteCategoryDB(id: string): Promise<void> {
 export async function getWalletsDB(includeArchived: boolean = true): Promise<Wallet[]> {
     const db = await getDatabase();
     const query = includeArchived
-        ? 'SELECT * FROM wallets ORDER BY is_archived ASC, is_default DESC, created_at ASC;'
-        : 'SELECT * FROM wallets WHERE is_archived = 0 ORDER BY is_default DESC, created_at ASC;';
+        ? `SELECT wallets.*, ${ledgerBalance()} AS balance, (SELECT observed_at FROM (${cbeBalanceEvidence()}) e ORDER BY observed_at DESC,received_at DESC,id DESC LIMIT 1) AS bank_balance_as_of, (SELECT date_source FROM (${cbeBalanceEvidence()}) e ORDER BY observed_at DESC,received_at DESC,id DESC LIMIT 1) AS bank_balance_date_source FROM wallets ORDER BY is_archived ASC, is_default DESC, created_at ASC;`
+        : `SELECT wallets.*, ${ledgerBalance()} AS balance, (SELECT observed_at FROM (${cbeBalanceEvidence()}) e ORDER BY observed_at DESC,received_at DESC,id DESC LIMIT 1) AS bank_balance_as_of, (SELECT date_source FROM (${cbeBalanceEvidence()}) e ORDER BY observed_at DESC,received_at DESC,id DESC LIMIT 1) AS bank_balance_date_source FROM wallets WHERE is_archived = 0 ORDER BY is_default DESC, created_at ASC;`;
     const rows = await db.getAllAsync<WalletRow>(query);
     return rows.map(mapWallet);
 }
@@ -1329,6 +1384,10 @@ export async function insertWalletDB(wallet: Wallet): Promise<void> {
                 wallet.createdAt,
             ],
         );
+        if(wallet.balanceMode==='cbe_sms') {
+            if(wallet.providerId!=='cbe' || wallet.currency!=='ETB' || !wallet.accountNumberLast4)throw Error('CBE balance mode requires a matching CBE ETB account ending.');
+            await db.runAsync("UPDATE wallets SET balance_mode='cbe_sms' WHERE id=?",[wallet.id]);
+        }
     });
 }
 
@@ -1397,6 +1456,10 @@ export async function updateWalletDB(
                 id,
             ],
         );
+        if(updated.balanceMode!==undefined) {
+            if(!['ledger','cbe_sms'].includes(updated.balanceMode) || (updated.balanceMode==='cbe_sms' && (newProviderId!=='cbe' || newCurrency!=='ETB' || !newLast4)))throw Error('Choose an owned CBE ETB account ending for bank-reported balance.');
+            await db.runAsync('UPDATE wallets SET balance_mode=? WHERE id=?',[updated.balanceMode,id]);
+        }
     });
 }
 
@@ -1444,32 +1507,31 @@ export async function deleteWalletDB(id: string): Promise<void> {
 // JSON export. The export deliberately excludes the user's PIN hash.
 
 export async function exportDatabaseToJSON(settings?: UserPreferencesPayload): Promise<ExportDataPayload> {
-    const userRow = await getActiveUserDB();
-    const [wallets, categories, budgets, transactions] = await Promise.all([
-        getWalletsDB(),
-        getCategoriesDB(),
-        getBudgetsDB(),
-        getTransactionsDB(),
-    ]);
+    return withExclusiveTransaction(async db => {
+    const userRow = await db.getFirstAsync<UserRow>('SELECT * FROM users LIMIT 1;');
+    const wallets = (await db.getAllAsync<WalletRow>('SELECT * FROM wallets;')).map(mapWallet);
+    const categories = (await db.getAllAsync<CategoryRow>('SELECT * FROM categories;')).map(mapCategory);
+    const budgets = (await db.getAllAsync<BudgetRow>('SELECT * FROM budgets;')).map(mapBudget);
+    const transactions = (await db.getAllAsync<TransactionRow>('SELECT * FROM transactions;')).map(mapTransaction);
 
     const etbWalletIds = new Set(wallets.filter((wallet) => wallet.currency === 'ETB').map((wallet) => wallet.id));
     const etbClearedTransactions = transactions.filter(
         (transaction) => transaction.status === 'CLEARED' && etbWalletIds.has(transaction.walletId),
     );
     const totalIncome = etbClearedTransactions
-        .filter((transaction) => transaction.type === 'CREDIT')
+        .filter(isEarnedIncome)
         .reduce((sum, transaction) => sum + transaction.amount, 0);
     const totalExpenses = etbClearedTransactions
-        .filter((transaction) => transaction.type === 'DEBIT')
+        .filter(isPersonalSpending)
         .reduce((sum, transaction) => sum + transaction.amount, 0);
     const totalBalance = wallets
         .filter((wallet) => wallet.currency === 'ETB')
         .reduce((sum, wallet) => sum + wallet.balance, 0);
 
     return {
-        version: '1.0.0',
+        version: '2.0.0',
         exportedAt: new Date().toISOString(),
-        user: userRow?.user ?? null,
+        user: userRow ? mapUser(userRow) : null,
         wallets,
         categories,
         budgets,
@@ -1482,7 +1544,9 @@ export async function exportDatabaseToJSON(settings?: UserPreferencesPayload): P
             currency: 'ETB',
         },
         settings,
+        financialTables: await exportFinancialTables(db),
     };
+    });
 }
 
 export interface ImportSummary {
@@ -1501,8 +1565,51 @@ export async function importDatabaseFromJSON(payload: ExportDataPayload): Promis
     if (!Array.isArray(payload.wallets) || !Array.isArray(payload.categories) || !Array.isArray(payload.transactions)) {
         throw new Error('Invalid backup file: Missing core financial tables (wallets, categories, or transactions).');
     }
+    if(payload.version==='3.0.0')return withExclusiveTransaction(async db=>{
+        const current=await exportFinancialTables(db);
+        const merged=mergeSelectedTables(current,payload);
+        await restoreFinancialTables(db,merged);
+        for(const row of await db.getAllAsync<TransactionRow>('SELECT * FROM transactions;'))assertValidTransaction(mapTransaction(row));
+        for(const row of await db.getAllAsync<BudgetRow>('SELECT * FROM budgets;'))assertValidBudget(mapBudget(row));
+        return {restoredWallets:payload.wallets.length,restoredCategories:payload.categories.length,restoredBudgets:payload.budgets.length,restoredTransactions:payload.transactions.length,settings:payload.selection?.preferences?payload.settings:undefined};
+    });
+    if (!payload.wallets.length) throw Error('A backup must contain at least one wallet.');
+
+    if (payload.version === '2.0.0') {
+        return withExclusiveTransaction(async db => {
+            const legacyLedger = !!payload.financialTables?.transactions.some(row => !['amount_minor','occurred_at','received_at','imported_at','date_source'].some(key => key in row));
+            if (legacyLedger && payload.wallets.some(wallet => payload.financialTables?.wallets.find(row=>row.id===wallet.id)?.balance !== wallet.balance)) throw Error('Backup wallet views disagree.');
+            await restoreFinancialTables(db, payload.financialTables);
+            for (const row of await db.getAllAsync<TransactionRow>('SELECT * FROM transactions;')) assertValidTransaction(mapTransaction(row));
+            for (const row of await db.getAllAsync<BudgetRow>('SELECT * FROM budgets;')) assertValidBudget(mapBudget(row));
+            const snapshot = payload.financialTables!;
+            // Core views are included for portability, but may not disagree with
+            // the full snapshot. Reject edited/partial files instead of guessing.
+            const canonical = (items: object[]) => JSON.stringify(items.map(item => Object.fromEntries(Object.entries(item).filter(([, value]) => value !== undefined).sort(([a], [b]) => a.localeCompare(b)))).sort((a, b) => String(a.id).localeCompare(String(b.id))));
+            const normalizeMetadata = (transaction: Transaction): Transaction => ({ ...transaction,
+                amountMinor: transaction.amountMinor ?? Math.round(transaction.amount * 100),
+                occurredAt: transaction.occurredAt ?? Date.parse(transaction.date),
+                importedAt: transaction.importedAt ?? Date.parse(transaction.createdAt), datePrecision: transaction.datePrecision, eventDate: transaction.eventDate, dateSource: transaction.dateSource ?? 'legacy' });
+            const pairs: [object[], object[]][] = [
+                [payload.transactions.map(normalizeMetadata), (await db.getAllAsync<TransactionRow>('SELECT * FROM transactions;')).map(mapTransaction).map(normalizeMetadata)],
+                [legacyLedger ? payload.wallets.map(wallet=>({ ...wallet,balance:(Math.round(wallet.openingBalance*100)+payload.transactions.filter(t=>t.walletId===wallet.id && t.status==='CLEARED').reduce((sum,t)=>sum+(t.type==='CREDIT' ? 1 : -1)*Math.round(t.amount*100),0))/100 })) : payload.wallets, (await db.getAllAsync<WalletRow>('SELECT * FROM wallets;')).map(mapWallet)],
+                [payload.budgets, (await db.getAllAsync<BudgetRow>('SELECT * FROM budgets;')).map(mapBudget)],
+                [payload.categories, (await db.getAllAsync<CategoryRow>('SELECT * FROM categories;')).map(mapCategory)],
+            ];
+            if (pairs.some(([core, full]) => !Array.isArray(core) || canonical(core) !== canonical(full))) throw Error('Backup core records disagree with its financial snapshot.');
+            if (payload.user?.name) await db.runAsync('UPDATE users SET name=?, email=?;', [payload.user.name.trim(), payload.user.email?.trim() || null]);
+            return { restoredWallets:snapshot.wallets.length, restoredCategories:snapshot.categories.length, restoredBudgets:snapshot.budgets.length, restoredTransactions:snapshot.transactions.length, settings:payload.settings };
+        });
+    }
+    if (payload.version !== '1.0.0') throw Error('This backup version is not supported. Update BanKoni or choose a compatible backup.');
 
     return withExclusiveTransaction(async (db) => {
+        // Version 1 lacks relationship snapshots. Clear dependent records safely
+        // instead of leaving links pointing at the replaced ledger.
+        await db.execAsync('PRAGMA defer_foreign_keys=ON;');
+        for (const table of [...FINANCIAL_TABLES].reverse()) {
+            if (!['categories','wallets','transactions','budgets'].includes(table)) await db.runAsync(`DELETE FROM ${table};`);
+        }
         // 1. Delete transactions and budgets first to avoid foreign key / trigger blocks
         await db.runAsync('DELETE FROM transactions;');
         await db.runAsync('DELETE FROM budgets;');
@@ -1591,8 +1698,9 @@ export async function importDatabaseFromJSON(payload: ExportDataPayload): Promis
         let restoredBudgetsCount = 0;
         if (Array.isArray(payload.budgets)) {
             for (const b of payload.budgets) {
-                if (!validCategoryIds.has(b.categoryId)) continue;
-                const walletId = b.walletId && validWalletIds.has(b.walletId) ? b.walletId : null;
+                assertValidBudget(b);
+                if (!validCategoryIds.has(b.categoryId) || b.walletId && !validWalletIds.has(b.walletId)) throw Error('Backup budget refers to a missing category or wallet.');
+                const walletId = b.walletId || null;
 
                 await db.runAsync(
                     `INSERT INTO budgets (id, category_id, limit_amount, start_date, end_date, recurring, alert_threshold, wallet_id)
@@ -1616,26 +1724,13 @@ export async function importDatabaseFromJSON(payload: ExportDataPayload): Promis
         let restoredTransactionsCount = 0;
         for (const tx of payload.transactions) {
             if (!validCategoryIds.has(tx.categoryId) || !validWalletIds.has(tx.walletId)) {
-                continue;
+                throw Error('Backup transaction refers to a missing wallet or category.');
             }
 
-            await db.runAsync(
-                `INSERT INTO transactions
-                 (id, amount, type, category_id, note, date, status, wallet_id, current_balance, source, raw_sms, created_at)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'manual', NULL, ?);`,
-                [
-                    tx.id,
-                    Number(tx.amount),
-                    tx.type,
-                    tx.categoryId,
-                    tx.note || '',
-                    tx.date,
-                    tx.status || 'CLEARED',
-                    tx.walletId,
-                    tx.currentBalance ?? null,
-                    tx.createdAt || new Date().toISOString(),
-                ],
-            );
+            assertValidTransaction(tx);
+            await assertTransactionReferences(db, tx);
+            const command = transactionInsert(tx);
+            await db.runAsync(command.sql, command.params);
             restoredTransactionsCount++;
         }
 
@@ -1894,6 +1989,7 @@ export async function createTransferDB(params: {
     feeAmount?: number;
     note?: string;
     date?: string;
+    datePrecision?: Transaction['datePrecision']; eventDate?: string;
     fromSmsReference?: string;
     toSmsReference?: string;
     fromRawSms?: string;
@@ -1901,7 +1997,10 @@ export async function createTransferDB(params: {
     reconciledFromBalance?: number;
     reconciledToBalance?: number;
     source?: 'manual' | 'sms';
-    smsImport?: { id: string; fromFingerprint: string; toFingerprint: string; messageKeys: string[]; vatAmount?: number };
+    smsImport?: { id: string; fromFingerprint: string; toFingerprint: string; messageKeys: string[]; vatAmount?: number;
+        fromCbeDetails?:Transaction['smsDetails'];toCbeDetails?:Transaction['smsDetails'];fromCompatibleFingerprints?:string[];toCompatibleFingerprints?:string[];
+        fromReceivedAt?: number; toReceivedAt?: number; fromEventDate?: string; toEventDate?: string;
+        fromDateSource?: Transaction['dateSource']; toDateSource?: Transaction['dateSource']; fromDatePrecision?: Transaction['datePrecision']; toDatePrecision?: Transaction['datePrecision'] };
 }): Promise<Transfer> {
     if (params.fromWalletId === params.toWalletId) {
         throw new Error('Transfer requires two distinct wallets.');
@@ -1909,6 +2008,8 @@ export async function createTransferDB(params: {
     if (!Number.isFinite(params.amount) || params.amount <= 0) {
         throw new Error('Transfer amount must be greater than zero.');
     }
+    for (const amount of [params.amount,params.feeAmount ?? 0]) if (!Number.isSafeInteger(Math.round(amount*100)) || amount < 0 || Math.abs(amount*100-Math.round(amount*100))>0.00001) throw Error('Transfer amounts must be exact integer santim.');
+    if (params.source === 'sms' && (!params.date || !isValidDate(params.date))) throw Error('An SMS transfer needs its original event date.');
 
     return withExclusiveTransaction(async (db) => {
         if (params.smsImport) {
@@ -1919,21 +2020,24 @@ export async function createTransferDB(params: {
                     fromWalletId: row.from_wallet_id, toWalletId: row.to_wallet_id, amount: row.amount,
                     feeAmount: row.fee_amount, feeTransactionId: row.fee_transaction_id ?? undefined, createdAt: row.created_at };
             }
-            const duplicate = await db.getFirstAsync('SELECT id FROM transactions WHERE sms_fingerprint IN (?, ?);',
-                [params.smsImport.fromFingerprint, params.smsImport.toFingerprint]);
+            const fingerprints=[...(params.smsImport.fromCompatibleFingerprints ?? [params.smsImport.fromFingerprint]),...(params.smsImport.toCompatibleFingerprints ?? [params.smsImport.toFingerprint])];
+            const duplicate = await db.getFirstAsync(`SELECT id FROM transactions WHERE sms_fingerprint IN (${fingerprints.map(()=>'?').join(',')});`,fingerprints);
             if (duplicate) throw new Error('A transfer leg is already imported. Review the existing ledger entry.');
         }
-        const fromWallet = await db.getFirstAsync<{ id: string; name: string }>(
-            'SELECT id, name FROM wallets WHERE id = ?;',
+        const fromWallet = await db.getFirstAsync<{ id: string; name: string; currency: string;provider_id:string }>(
+            'SELECT id, name, currency,provider_id FROM wallets WHERE id = ?;',
             [params.fromWalletId]
         );
-        const toWallet = await db.getFirstAsync<{ id: string; name: string }>(
-            'SELECT id, name FROM wallets WHERE id = ?;',
+        const toWallet = await db.getFirstAsync<{ id: string; name: string; currency: string;provider_id:string }>(
+            'SELECT id, name, currency,provider_id FROM wallets WHERE id = ?;',
             [params.toWalletId]
         );
         if (!fromWallet || !toWallet) {
             throw new Error('One or both wallets for the transfer could not be found.');
         }
+        if (fromWallet.currency !== toWallet.currency) throw Error('Transfers need accounts in the same currency; currency conversion is not configured.');
+        if((params.source==='sms' || params.fromSmsReference) && fromWallet.provider_id==='cbe' && !params.smsImport?.fromCbeDetails)throw Error('CBE transfer requires shared source validation.');
+        if((params.source==='sms' || params.toSmsReference) && toWallet.provider_id==='cbe' && !params.smsImport?.toCbeDetails)throw Error('CBE transfer requires shared destination validation.');
 
         const { expenseCategoryId, incomeCategoryId } = await getDefaultTransferCategories(db);
         const now = new Date().toISOString();
@@ -2058,7 +2162,32 @@ export async function createTransferDB(params: {
             ]
         );
 
+        if(params.datePrecision) {
+            for(const id of [fromTxId,toTxId,...(feeTxId ? [feeTxId] : [])]) {
+                await db.runAsync('UPDATE transactions SET date_precision=?,event_date=? WHERE id=?',[params.datePrecision,params.eventDate ?? null,id]);
+                assertValidTransaction(mapTransaction((await db.getFirstAsync<TransactionRow>('SELECT * FROM transactions WHERE id=?',[id]))!));
+            }
+        }
         if (params.smsImport) {
+            const provenance = params.smsImport;
+            for(const [ids,details] of [[[fromTxId,...(feeTxId ? [feeTxId]:[])],provenance.fromCbeDetails],[[toTxId],provenance.toCbeDetails]] as const) {
+                if(details)for(const id of ids) {
+                    await db.runAsync('UPDATE transactions SET sms_details=? WHERE id=?',[JSON.stringify(details),id]);
+                    const transaction=mapTransaction((await db.getFirstAsync<TransactionRow>('SELECT * FROM transactions WHERE id=?',[id]))!);
+                    assertValidTransaction(transaction);await assertTransactionReferences(db,transaction);
+                }
+            }
+            for (const [ids,received,eventDate,dateSource,datePrecision] of [
+                [[fromTxId,...(feeTxId ? [feeTxId] : [])],provenance.fromReceivedAt,provenance.fromEventDate,provenance.fromDateSource,provenance.fromDatePrecision],
+                [[toTxId],provenance.toReceivedAt,provenance.toEventDate,provenance.toDateSource,provenance.toDatePrecision],
+            ] as const) {
+                if (eventDate && !isValidDate(eventDate)) throw Error('Transfer event date is invalid.');
+                for (const id of ids) {
+                    await db.runAsync('UPDATE transactions SET date=?,occurred_at=?,received_at=?,imported_at=?,date_source=?,date_precision=? WHERE id=?',
+                        [eventDate ?? date,Date.parse(eventDate ?? date),received ?? null,Date.parse(now),dateSource ?? 'legacy',datePrecision ?? params.datePrecision ?? null,id]);
+                    assertValidTransaction(mapTransaction((await db.getFirstAsync<TransactionRow>('SELECT * FROM transactions WHERE id=?',[id]))!));
+                }
+            }
             for (const key of params.smsImport.messageKeys) {
                 await db.runAsync('INSERT INTO sms_import_receipts(message_key, transaction_id, created_at) VALUES (?, ?, ?);',
                     [key, key === params.smsImport.messageKeys[0] ? fromTxId : toTxId, now]);
@@ -2090,6 +2219,7 @@ export async function completeTransferLegDB(params: {
         rawSms?: string;
         currentBalance?: number;
         date?: string;
+        datePrecision?: Transaction['datePrecision']; eventDate?: string; receivedAt?: number; dateSource?: Transaction['dateSource'];
         note?: string;
     };
     note?: string;
@@ -2102,6 +2232,8 @@ export async function completeTransferLegDB(params: {
         if (!existingTx) {
             throw new Error(`Transaction with id ${params.existingTransactionId} not found.`);
         }
+        const accounts=await db.getAllAsync<{provider_id:string}>('SELECT provider_id FROM wallets WHERE id IN (?,?)',[existingTx.wallet_id,params.newLeg.walletId]);
+        if(accounts.some(w=>w.provider_id==='cbe'))throw Error('CBE transfer completion requires the shared reviewed import plan; direct leg completion is not permitted.');
 
         const now = new Date().toISOString();
         const date = params.newLeg.date || now;
@@ -2270,6 +2402,12 @@ export async function completeTransferLegDB(params: {
             }
         }
 
+        const newIds=[params.newLeg.type==='DEBIT' ? fromTxId : toTxId,...(params.newLeg.type==='DEBIT' && feeTxId ? [feeTxId] : [])];
+        for(const id of newIds) {
+            await db.runAsync('UPDATE transactions SET date_precision=?,event_date=?,received_at=?,date_source=? WHERE id=?',
+                [params.newLeg.datePrecision ?? null,params.newLeg.eventDate ?? null,params.newLeg.receivedAt ?? null,params.newLeg.dateSource ?? 'manual',id]);
+            assertValidTransaction(mapTransaction((await db.getFirstAsync<TransactionRow>('SELECT * FROM transactions WHERE id=?',[id]))!));
+        }
         // Link in transfers table
         await db.runAsync(
             `INSERT INTO transfers
@@ -2331,6 +2469,7 @@ export async function allocateRefundDB(params: {
     if (!Number.isFinite(params.allocatedAmount) || params.allocatedAmount <= 0) {
         throw new Error('Refund allocation amount must be greater than zero.');
     }
+    if (!Number.isSafeInteger(Math.round(params.allocatedAmount*100)) || Math.abs(params.allocatedAmount*100-Math.round(params.allocatedAmount*100))>0.00001) throw Error('Refund allocation must be integer santim.');
 
     return withExclusiveTransaction(async (db) => {
         const refundTx = await db.getFirstAsync<{ id: string; amount: number; type: string }>(
@@ -2339,6 +2478,8 @@ export async function allocateRefundDB(params: {
         );
         if (!refundTx) throw new Error('Refund credit transaction not found.');
         if (refundTx.type !== 'CREDIT') throw new Error('Refund transaction must be a CREDIT.');
+        const allocated = await db.getFirstAsync<{minor:number}>('SELECT COALESCE(SUM(CAST(ROUND(allocated_amount*100) AS INTEGER)),0) AS minor FROM refund_allocations WHERE refund_transaction_id=?',[params.refundTransactionId]);
+        if ((allocated?.minor ?? 0)+Math.round(params.allocatedAmount*100)>Math.round(refundTx.amount*100)) throw Error('Allocations exceed the refund credit.');
 
         if (params.originalTransactionId) {
             const origTx = await db.getFirstAsync<{ id: string; amount: number; type: string }>(
@@ -2347,6 +2488,8 @@ export async function allocateRefundDB(params: {
             );
             if (!origTx) throw new Error('Original purchase transaction not found.');
             if (origTx.type !== 'DEBIT') throw new Error('Original transaction must be a DEBIT.');
+            const used = await db.getFirstAsync<{minor:number}>('SELECT COALESCE(SUM(CAST(ROUND(allocated_amount*100) AS INTEGER)),0) AS minor FROM refund_allocations WHERE original_transaction_id=?',[params.originalTransactionId]);
+            if ((used?.minor ?? 0)+Math.round(params.allocatedAmount*100)>Math.round(origTx.amount*100)) throw Error('Allocations exceed the original purchase.');
         }
 
         const now = new Date().toISOString();
@@ -2379,6 +2522,28 @@ export async function allocateRefundDB(params: {
             notes: params.notes,
             createdAt: now,
         };
+    });
+}
+
+/** Reviewed refund/reversal credit, optional purchase link and receipt form one ledger commit. */
+export async function importReviewedRefundDB(transaction: Transaction, messageKey?: string, originalId?: string): Promise<void> {
+    const refund: Transaction = { ...transaction, subType: 'REFUND' };
+    assertValidTransaction(refund);
+    if (refund.type !== 'CREDIT' || refund.status !== 'CLEARED') throw Error('A reviewed refund must be a confirmed credit.');
+    await withExclusiveTransaction(async db => {
+        await assertTransactionReferences(db, refund);
+        if (messageKey && await db.getFirstAsync('SELECT 1 FROM sms_import_receipts WHERE message_key=?',[messageKey])) throw Error('This message has already been imported.');
+        if (originalId) {
+            const original = await db.getFirstAsync<{ amount: number; type: string; status: string; currency: string }>(`SELECT t.amount,t.type,t.status,w.currency FROM transactions t JOIN wallets w ON w.id=t.wallet_id WHERE t.id=? AND t.is_transfer=0`,[originalId]);
+            const account = await db.getFirstAsync<{currency:string}>('SELECT currency FROM wallets WHERE id=?',[refund.walletId]);
+            if (!original || original.type !== 'DEBIT' || original.status !== 'CLEARED' || original.currency !== account?.currency) throw Error('Select a confirmed purchase in the same currency.');
+            const prior = await db.getFirstAsync<{minor:number}>('SELECT COALESCE(SUM(CAST(ROUND(allocated_amount*100) AS INTEGER)),0) AS minor FROM refund_allocations WHERE original_transaction_id=?',[originalId]);
+            if ((prior?.minor ?? 0) + Math.round(refund.amount*100) > Math.round(original.amount*100)) throw Error('This refund exceeds the unrefunded purchase amount. Review the amount or choose another purchase.');
+        }
+        const insert = transactionInsert(refund); await db.runAsync(insert.sql,insert.params);
+        await db.runAsync('INSERT INTO refund_allocations(id,refund_transaction_id,original_transaction_id,allocated_amount,notes,created_at) VALUES(?,?,?,?,?,?)',
+            [`refund-${refund.id}`,refund.id,originalId ?? null,refund.amount,'User-confirmed refund or reversal',refund.createdAt]);
+        if (messageKey) await db.runAsync('INSERT INTO sms_import_receipts(message_key,transaction_id,created_at) VALUES(?,?,?)',[messageKey,refund.id,refund.createdAt]);
     });
 }
 
@@ -3318,7 +3483,8 @@ export async function deleteKnownAccountDB(id: string): Promise<void> {
 export async function reconcileWalletBalanceDB(walletId: string, currentBalance: number): Promise<void> {
     if (!Number.isFinite(currentBalance)) return;
     await withExclusiveTransaction(async (db) => {
-        await db.runAsync('UPDATE wallets SET balance = ? WHERE id = ?;', [currentBalance, walletId]);
+        // SMS snapshots are evidence on their transactions, never an opening-balance adjustment.
+        await db.runAsync(`UPDATE wallets SET balance = ${ledgerBalance()} WHERE id = ?;`, [walletId]);
     });
 }
 
@@ -3327,20 +3493,75 @@ export async function reconcileWalletBalanceDB(walletId: string, currentBalance:
 /** One atomic handoff: principal, fees, wallet delta and receipt commit together. */
 export async function applySmsImportPlanDB(messageId: string, plan: ImportPlan): Promise<'imported' | 'duplicate'> {
     if (plan.status !== 'imported' || !plan.transaction) throw new Error('A valid financial plan is required');
-    return withExclusiveTransaction(async db => {
-        const receipt = await db.getFirstAsync('SELECT message_key FROM sms_import_receipts WHERE message_key = ?;', [messageId]);
-        if (receipt) return 'duplicate';
+    return withExclusiveTransaction(db => applySmsPlan(db,messageId,plan));
+}
+async function saveCbeBalanceCheckpoint(db:SQLite.SQLiteDatabase,plan:ImportPlan):Promise<void> {
+    const c=plan.balanceCheckpoint;if(!c)return;
+    if(plan.candidate?.providerId!=='cbe'||!Number.isSafeInteger(c.balanceMinor)||c.balanceMinor<0)throw Error('Invalid CBE bank checkpoint.');
+    const conflict=await db.getFirstAsync<{id:string}>('SELECT id FROM cbe_balance_checkpoints WHERE wallet_id=? AND observed_at=? AND balance_minor<>? LIMIT 1',[c.walletId,c.observedAt,c.balanceMinor]);
+    if(conflict)throw Error('Conflicting CBE balances share the same event time. Confirm the original dates before using a bank balance.');
+    await db.runAsync('INSERT OR IGNORE INTO cbe_balance_checkpoints(id,wallet_id,account_last4,balance_minor,observed_at,received_at,date_source,date_precision) VALUES(?,?,?,?,?,?,?,?)',[c.id,c.walletId,c.accountLast4,c.balanceMinor,c.observedAt,c.receivedAt,c.dateSource,c.datePrecision]);
+}
+async function applySmsPlan(db: SQLite.SQLiteDatabase, messageId: string, plan: ImportPlan): Promise<'imported' | 'duplicate'> {
+        if(plan.candidate?.providerId==='cbe' && (!plan.normalized || !plan.transaction?.smsDetails))throw Error('CBE canonical financial validation is required.');
+        assertValidTransaction(plan.transaction!);
+        await assertTransactionReferences(db,plan.transaction!);
+        if(plan.candidate?.providerId==='cbe')for(const entry of plan.entries ?? []){assertValidTransaction(entry);await assertTransactionReferences(db,entry);}
+        const receipt = await db.getFirstAsync<{transaction_id:string}>('SELECT transaction_id FROM sms_import_receipts WHERE message_key = ?;', [messageId]);
+        if (receipt) {await assertCbeDuplicateConsistent(db,receipt.transaction_id,plan);return 'duplicate';}
         const query = duplicateQuery(plan);
         const existing = await db.getFirstAsync<{id: string}>(query.sql, query.params);
         if (existing) {
+            await assertCbeDuplicateConsistent(db,existing.id,plan);
             await db.runAsync('INSERT INTO sms_import_receipts(message_key, transaction_id, created_at) VALUES (?, ?, ?);',
                 [messageId, existing.id, new Date().toISOString()]);
             return 'duplicate';
         }
-        assertValidTransaction(plan.transaction!);
-        await assertTransactionReferences(db, plan.transaction!);
         for (const command of plan.commands) await db.runAsync(command.sql, command.params);
+        await saveCbeBalanceCheckpoint(db,plan);
         return 'imported';
+}
+
+/** Existing bad imports are retained for reconciliation, never silently acknowledged
+ * as financially correct and never "fixed" by adding a second transaction. */
+async function assertCbeDuplicateConsistent(db:SQLite.SQLiteDatabase,id:string,plan:ImportPlan):Promise<void> {
+    if(plan.candidate?.providerId!=='cbe' || !plan.normalized)return;
+    const existing=await db.getFirstAsync<TransactionRow>('SELECT * FROM transactions WHERE id=?',[id]);
+    if(!existing)return; // A durable receipt also preserves an intentional deletion.
+    let impact=existing.amount_minor ?? Math.round(existing.amount*100);
+    if(existing.type==='DEBIT') {
+        const fee=await db.getFirstAsync<{amount:number;amount_minor:number|null}>(`SELECT amount,amount_minor FROM transactions WHERE id=? OR id=(SELECT fee_transaction_id FROM transfers WHERE from_transaction_id=? LIMIT 1) LIMIT 1`,[`${id}-fee`,id]);
+        if(fee)impact+=fee.amount_minor ?? Math.round(fee.amount*100);
+    }
+    if(impact!==plan.normalized.ledgerAmountMinor)throw Error('CBE existing entry conflicts with the verified account impact. Reconcile the original entry before importing.');
+}
+
+export interface SmsBatchOutcome { id: string; status: 'imported' | 'duplicate' | 'review' | 'skipped' | 'failed'; reason: string }
+/** One durable commit per bounded batch; savepoints isolate malformed messages from valid neighbours. */
+export async function applySmsProcessingBatchDB(items: { id: string; plan: ImportPlan }[], evidenceInbox = false): Promise<SmsBatchOutcome[]> {
+    if (items.length > 40) throw Error('Process at most 40 messages per ledger batch.');
+    return withExclusiveTransaction(async db => {
+        const outcomes: SmsBatchOutcome[] = [];
+        for (const item of items) {
+            await db.execAsync('SAVEPOINT sms_message;');
+            let outcome: SmsBatchOutcome;
+            try {
+                const exists = await db.getFirstAsync('SELECT 1 FROM sms_import_receipts WHERE message_key=?',[item.id]);
+                const status = item.plan.status === 'imported' && item.plan.candidate?.providerId==='cbe' ? await applySmsPlan(db,item.id,item.plan) : exists ? 'duplicate' : item.plan.status === 'imported' ? await applySmsPlan(db,item.id,item.plan) : item.plan.status;
+                if(status==='review')await saveCbeBalanceCheckpoint(db,item.plan);
+                outcome = { id:item.id,status,reason:exists ? 'Already in the ledger' : item.plan.reason };
+                await db.execAsync('RELEASE sms_message;');
+            } catch (error) {
+                await db.execAsync('ROLLBACK TO sms_message; RELEASE sms_message;');
+                outcome = error instanceof Error && error.message.startsWith('CBE existing entry conflicts')
+                    ? {id:item.id,status:'review',reason:error.message}
+                    : { id:item.id,status:'failed',reason:'Local processing failed. Your message remains queued for retry.' };
+            }
+            if (evidenceInbox) await db.runAsync(`UPDATE scriptable_sms_inbox SET status=?,reason=?,body=CASE WHEN ? IN ('imported','duplicate','skipped') THEN '' ELSE body END WHERE message_key=?`,
+                [outcome.status === 'skipped' ? 'dismissed' : outcome.status,outcome.reason,outcome.status,item.id]);
+            outcomes.push(outcome);
+        }
+        return outcomes;
     });
 }
 
@@ -3379,5 +3600,19 @@ export async function finishScriptableMessageDB(id: string, status: InboxRow['st
     const terminal = ['imported','duplicate','dismissed'].includes(status);
     await withExclusiveTransaction(async db => {
         await db.runAsync('UPDATE scriptable_sms_inbox SET status=?,reason=?,body=CASE WHEN ? THEN \'\' ELSE body END WHERE message_key=?;', [status,reason.slice(0,600),terminal?1:0,id]);
+    });
+}
+
+/** Called only after local PIN verification and explicit destructive confirmation. */
+export async function wipeVaultDB(userId:string):Promise<void> {
+    await withExclusiveTransaction(async db=>{
+        const active=await db.getFirstAsync<{id:string}>('SELECT id FROM users LIMIT 1');
+        if(!active || active.id!==userId)throw Error('Unlock the current vault before erasing it.');
+        await db.execAsync('PRAGMA secure_delete=ON; PRAGMA defer_foreign_keys=ON;');
+        await db.runAsync('UPDATE wallets SET is_default=0');
+        for(const table of [...FINANCIAL_TABLES].reverse())if(!['wallets','categories','transactions'].includes(table))await db.runAsync(`DELETE FROM ${table}`);
+        await db.runAsync('DELETE FROM transactions');await db.runAsync('DELETE FROM wallets');
+        await db.runAsync('DELETE FROM categories WHERE is_built_in=0');await db.runAsync('DELETE FROM users');
+        await seedInitialData(db);
     });
 }
