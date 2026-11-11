@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 module.exports = function withAutomaticSms(config) {
   require('../scripts/build-sms-engine.cjs')();
+  // The PWA is the iPhone distribution target. Preserve native experiments behind
+  // explicit opt-in for a future signed iOS build; Android behavior is unchanged.
+  if (!config.extra?.enableExperimentalIosSms) return config;
   config = withInfoPlist(config, mod => {
     mod.modResults.UIBackgroundModes = [...new Set([...(mod.modResults.UIBackgroundModes || []), 'fetch'])];
     mod.modResults.BGTaskSchedulerPermittedIdentifiers = [...new Set([...(mod.modResults.BGTaskSchedulerPermittedIdentifiers || []), 'com.sami7ma.bankoni.sms-recovery'])];
