@@ -99,6 +99,7 @@ export function extractAccountLast4(accountText?: string): string | undefined {
  */
 export function expandTwoDigitYear(yearStr: string): string {
     if (yearStr.length === 4) return yearStr;
+    if (yearStr.length !== 2) return yearStr;
     const yy = parseInt(yearStr, 10);
     if (isNaN(yy)) return yearStr;
     const fullYear = yy < 70 ? 2000 + yy : 1900 + yy;
@@ -114,6 +115,14 @@ export function expandTwoDigitYear(yearStr: string): string {
  *  4. Date-only: "19/10/2026" or "21/10/26"
  */
 export function parseEthiopianDateTime(rawDate: string): string | null {
+    const iso = parseDateUnchecked(rawDate);
+    if (!iso) return null;
+    const [year, month, day] = iso.slice(0, 10).split('-').map(Number);
+    const calendar = new Date(Date.UTC(year, month - 1, day));
+    if (calendar.getUTCFullYear() !== year || calendar.getUTCMonth() !== month - 1 || calendar.getUTCDate() !== day) return null;
+    return iso;
+}
+function parseDateUnchecked(rawDate: string): string | null {
     if (!rawDate) return null;
     const text = normalizeSmsText(rawDate);
 
@@ -126,6 +135,7 @@ export function parseEthiopianDateTime(rawDate: string): string | null {
         const month = ampmMatch[2].padStart(2, '0');
         const year = expandTwoDigitYear(ampmMatch[3]);
         let hour = parseInt(ampmMatch[4], 10);
+        if (hour < 1 || hour > 12) return null;
         const minute = ampmMatch[5].padStart(2, '0');
         const second = ampmMatch[6] ? ampmMatch[6].padStart(2, '0') : '00';
         const period = ampmMatch[7].toUpperCase();

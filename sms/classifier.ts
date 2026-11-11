@@ -5,7 +5,7 @@
 export interface ClassificationResult {
     isNonTransaction: boolean;
     reason?: string;
-    messageType?: 'otp' | 'atm_authorization' | 'airtime_receipt' | 'promotional' | 'failed_transaction';
+    messageType?: 'otp' | 'atm_authorization' | 'airtime_receipt' | 'promotional' | 'failed_transaction' | 'security_alert' | 'balance_only';
 }
 
 const ATM_AUTHORIZATION_REGEX = /\bATM\s+withdraw(?:al)?\s+secret\s+code\s+is\s+(\d{4,8})\b/i;
@@ -19,6 +19,7 @@ const AIRTIME_RECEIPT_PATTERNS = [
 ];
 
 const OTP_PATTERNS = [
+    /\b(?:pin|passcode|password|verification\s+code|security\s+code)\s*(?:(?:is|[:=-])\s*)?\d{4,8}\b/i,
     /\b(?:OTP|verification code|security code|PIN)\s+is\s*[:\s]?\s*([0-9]{4,8})\b/i,
     /\bcode\s+is\s*([0-9]{4,8})\b/i,
     /\bDo not share this code\b/i,
@@ -26,6 +27,9 @@ const OTP_PATTERNS = [
 ];
 
 const FAILED_PATTERNS = [
+    /\b(?:transaction|payment|transfer|withdrawal)\b[^.]{0,120}\b(?:declined|failed|rejected|unsuccessful)\b/i,
+    /\b(?:transaction|payment|transfer|withdrawal)\s+(?:(?:has\s+been|was|is)\s+)?(?:failed|declined|rejected|pending|unsuccessful)\b/i,
+    /\binsufficient\s+(?:funds|balance)\b/i,
     /\btransaction\s+(?:has\s+)?failed\b/i,
     /\btransaction\s+was\s+unsuccessful\b/i,
     /\binsufficient\s+balance\b/i,
@@ -48,6 +52,13 @@ const PROMOTIONAL_PATTERNS = [
  * that must not be imported as a financial transaction.
  */
 export function classifyMessage(text: string): ClassificationResult {
+    if (/\b(?:login\s+(?:alert|attempt|code)|new\s+device|password\s+(?:changed|reset)|security\s+alert|authentication\s+code|one[ -]time\s+(?:password|code))\b/i.test(text)) {
+        return { isNonTransaction: true, messageType: 'security_alert', reason: 'Authentication or security notification; no confirmed money movement.' };
+    }
+    if (/\bOTP\d*\b/i.test(text)) return { isNonTransaction: true, messageType: 'otp', reason: 'One-time authentication code; not a financial transaction.' };
+    if (/\bbalance\b/i.test(text) && !/\b(?:credited|debited|received|paid|transferred|withdrawn|withdrawal|deposited|deposit|bought|purchased|refund(?:ed)?|revers(?:al|ed)|debit\s+transaction|credit\s+transaction)\b/i.test(text)) {
+        return { isNonTransaction: true, messageType: 'balance_only', reason: 'Balance information is reconciliation evidence, not a transaction.' };
+    }
     // 1. Telebirr ATM withdrawal authorization code (money has not moved yet)
     if (ATM_AUTHORIZATION_REGEX.test(text)) {
         return {
@@ -96,11 +107,9 @@ export function classifyMessage(text: string): ClassificationResult {
         for (const pattern of PROMOTIONAL_PATTERNS) {
             if (
                 pattern.test(text) &&
-                !text.includes('Current balance') &&
                 !text.includes('credited with') &&
                 !text.includes('debited with') &&
-                !text.includes('balance now is') &&
-                !text.includes('Available Balance')
+                !/\byou\s+have\s+(?:paid|received|transferred|bought)\b/i.test(text)
             ) {
                 return {
                     isNonTransaction: true,
