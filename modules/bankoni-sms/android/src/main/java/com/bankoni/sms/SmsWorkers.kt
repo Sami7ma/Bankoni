@@ -34,21 +34,23 @@ object SmsWork {
 class SmsImportWorker(context: Context, params: WorkerParameters): Worker(context,params) {
   override fun doWork(): Result {
     val queue = SmsQueue.get(applicationContext)
-    if (!queue.enabled()) return Result.success()
+    if (!queue.enabled() || !queue.hasSources()) return Result.success()
     return try {
       queue.beginCatchUp()
       if (queue.setting("scanState") == "running") SmsHistory.scanBatch(applicationContext,queue)
       if (queue.hasPending() && !runJavaScript()) return Result.retry()
-      if (queue.setting("scanState") == "running" || queue.hasPending()) {
+      if (queue.setting("scanState") == "running" || queue.hasPending() || queue.hasCatchUp()) {
         // Chain a bounded unit of work; do not hold one worker for a 12-month inbox.
         SmsWork.schedule(applicationContext)
       }
       Result.success()
     } catch (e: SecurityException) {
-      queue.set("scanError","SMS permission was revoked. Grant access in Settings to resume.")
+      queue.set("lifecycle","permission_required"); queue.set("scanState","failed")
+      queue.set("scanError","SMS permission was revoked. Grant access in Settings to resume."); queue.saveScan()
       Result.success()
     } catch (e: Exception) {
-      queue.set("scanError", "Background processing interrupted; will retry.")
+      queue.set("lifecycle","failed"); queue.set("scanState","failed")
+      queue.set("scanError", "Background processing interrupted; will retry."); queue.saveScan()
       Result.retry()
     }
   }
@@ -78,21 +80,24 @@ class SmsImportWorker(context: Context, params: WorkerParameters): Worker(contex
 
 object SmsHistory {
   fun scanBatch(applicationContext: Context, queue: SmsQueue) {
+    if (!queue.enabled() || !queue.hasSources() || queue.setting("scanState") != "running") return
     if (ContextCompat.checkSelfPermission(applicationContext, Manifest.permission.READ_SMS) != PackageManager.PERMISSION_GRANTED) throw SecurityException()
     val resolver = applicationContext.contentResolver
     val start = queue.setting("scanStart")
     val end = queue.setting("scanEnd")
     val lastDate = queue.setting("scanDate")
     val lastId = queue.setting("scanId")
-    if (queue.setting("scanSeen","0") == "0") {
-      resolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id"),"date>=? AND date<=? AND (date>? OR (date=? AND _id>?))",arrayOf(start,end,lastDate,lastDate,lastId),null)?.use { queue.set("scanTotal",it.count.toString()) }
+    val addresses = SenderRegistry.addresses(queue,queue.setting("scanWallet"),queue.setting("scanPhase") == "catchup")
+    if (addresses.isEmpty()) return
+    val selection = "UPPER(TRIM(address)) IN (${addresses.joinToString(",") { "?" }}) AND date>=? AND date<=? AND (date>? OR (date=? AND _id>?))"
+    val args = (addresses + listOf(start,end,lastDate,lastDate,lastId)).toTypedArray()
+    run {
+      resolver.query(Telephony.Sms.Inbox.CONTENT_URI, arrayOf("_id"),selection,args,null)?.use { queue.set("scanTotal",(queue.setting("scanSeen","0").toLong()+it.count).toString()) }
     }
     var count = 0
     val db = queue.writableDatabase
     db.beginTransaction()
     try {
-      val selection = "date>=? AND date<=? AND (date>? OR (date=? AND _id>?))"
-      val args = arrayOf(start,end,lastDate,lastDate,lastId)
       val projection = arrayOf("_id","address","body","date","date_sent")
       val cursor = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
         resolver.query(Telephony.Sms.Inbox.CONTENT_URI,projection,Bundle().apply {
@@ -106,18 +111,26 @@ object SmsHistory {
       // and resume by key, without unsupported SQL LIMIT text in the ORDER BY clause.
       cursor?.use { c ->
         while(c.moveToNext() && count<200) {
-          if (!queue.enabled()) break
-          val body = c.getString(2) ?: ""
+          if (!queue.enabled() || queue.setting("scanState") != "running") break
           val sender = c.getString(1) ?: ""
           val received = c.getLong(3)
-          if (!SmsFilter.accepts(body,sender)) queue.set("scanFiltered",(queue.setting("scanFiltered","0").toLong()+1).toString())
-          else queue.enqueue(body,sender,c.getLong(4).takeIf { it > 0 } ?: received,"history")
+          // Recheck before reading any body, even if a broken provider ignores the SQL predicate.
+          if (SenderRegistry.find(queue,sender,false)?.optString("walletId")?.let { queue.setting("scanWallet").isBlank() || it == queue.setting("scanWallet") } == true) {
+            val body = c.getString(2) ?: ""
+            if (!SmsFilter.accepts(body,sender)) queue.set("scanFiltered",(queue.setting("scanFiltered","0").toLong()+1).toString())
+            // DATE_SENT is only a delivery identity shared with the broadcast PDU.
+            // Original DATE remains receivedAt and the financial date fallback.
+            else queue.enqueue(body,sender,received,"history",c.getLong(4).takeIf { it > 0 })
+          }
           queue.set("scanDate",received.toString()); queue.set("scanId",c.getLong(0).toString()); count++
         }
       } ?: throw IllegalStateException("SMS provider unavailable")
       queue.set("scanSeen",(queue.setting("scanSeen","0").toLong()+count).toString())
-      if (count<200 && queue.enabled()) { queue.set("scanState","complete"); queue.set("lastScan",System.currentTimeMillis().toString()) }
-      queue.set("scanError","")
+      if (count<200 && queue.enabled() && queue.setting("scanState") == "running") {
+        queue.set("scanState","complete"); queue.set("lastScan",System.currentTimeMillis().toString())
+        queue.set("lifecycle",if (queue.hasPending()) "parsing" else "completed")
+      }
+      queue.set("scanError",""); queue.saveScan()
       db.setTransactionSuccessful()
     } finally { db.endTransaction() }
   }
