@@ -11,6 +11,11 @@
   },
   "exclude": [
     "node_modules",
+    "dist",
+    "web-build",
+    "playwright-report",
+    "test-results",
+    "scriptable",
     "android",
     "ios"
   ]

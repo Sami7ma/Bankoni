@@ -26,6 +26,8 @@
       ]
     },
     "web": {
+      "bundler": "metro",
+      "output": "single",
       "favicon": "./assets/BankoniDrawerNObaground.png"
     },
     "plugins": [
