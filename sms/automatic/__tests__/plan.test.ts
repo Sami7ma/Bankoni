@@ -21,6 +21,15 @@ export function message(body: string, sender = 'CBE', id = 'message'): IncomingS
 const ordinary = 'Dear Customer, Your account 1********2293 has been credited with ETB 100.00 on 01/11/2026 at 08:38:24. Your current balance is ETB 1,000.00. Thank you for banking with CBE.';
 
 describe('Automatic SMS shared financial plan', () => {
+    it('requires review for merchant rules that the user did not authorize for automatic application', () => {
+        const body = 'Dear Customer, You have paid ETB 250.00 to Merchant Tomoca Coffee on 23/10/2026 10:15:00. Your transaction number is TB9988. Your current balance is ETB 750.00. Thank you for using telebirr.';
+        const rule = { id:'rule', pattern:'Tomoca Coffee', merchantId:'tomoca', categoryId:'cat-4', autoApply:false, createdAt:new Date(time).toISOString() };
+        const custom = {...context,wallets:[context.wallets[1]],merchantRules:[rule]};
+        const held = buildImportPlan(message(body,'telebirr'),custom);
+        expect(held.status).toBe('review'); expect(held.commands).toEqual([]);
+        const authorized = buildImportPlan(message(body,'telebirr'),{...custom,merchantRules:[{...rule,autoApply:true}]});
+        expect(authorized.status).toBe('imported'); expect(authorized.transaction?.categoryId).toBe('cat-4');
+    });
     it('holds both exact transfer examples for explicit confirmation without adding income or spending', () => {
         const debit = buildImportPlan(message(cbe),context);
         const credit = buildImportPlan(message(telebirr,'telebirr'),context);
@@ -89,8 +98,8 @@ describe('Automatic SMS shared financial plan', () => {
         runInNewContext(readFileSync('modules/bankoni-sms/ios/Resources/sms-engine.js','utf8'),sandbox);
         for(const body of [ordinary,cbe,telebirr,'OTP is 123456']) {
             const incoming = message(body,body===telebirr?'telebirr':'CBE');
-            expect(JSON.parse(JSON.stringify(sandbox.BanKoniSmsEngine.buildImportPlan(incoming,context))))
-                .toEqual(JSON.parse(JSON.stringify(buildImportPlan(incoming,context))));
+            expect(JSON.parse(JSON.stringify(sandbox.BanKoniSmsEngine.buildImportPlan(incoming,context,time+86400000))))
+                .toEqual(JSON.parse(JSON.stringify(buildImportPlan(incoming,context,time+86400000))));
         }
     });
 });
