@@ -13,6 +13,8 @@ export interface FeeBreakdown {
 }
 
 export interface ParsedTransactionCandidate {
+    /** False for heuristic/provisional previews. These may be reviewed, never auto-posted. */
+    automaticEligible?: boolean;
     providerId: SmsProviderId;
     type: 'CREDIT' | 'DEBIT';
     /** Principal transfer or payment amount in ETB */
@@ -27,6 +29,9 @@ export interface ParsedTransactionCandidate {
     accountIdentifier?: string;
     /** Extracted last 4 digits for wallet matching, when available */
     accountLast4?: string;
+    /** Explicit destination of the established CBE transfer template. */
+    destinationAccountLast4?: string;
+    sourceAccountLast4?: string;
     /** Recipient, counterparty, merchant, or sending/receiving institution */
     counterparty?: string;
     /** Authoritative bank or telebirr transaction reference */
@@ -57,7 +62,7 @@ export type SmsParseResult =
     | {
           status: 'non_transaction';
           reason: string;
-          messageType?: 'otp' | 'atm_authorization' | 'airtime_receipt' | 'promotional' | 'failed_transaction';
+          messageType?: import('./classifier').ClassificationResult['messageType'];
       }
     | {
           status: 'ambiguous';
