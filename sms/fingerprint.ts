@@ -103,6 +103,14 @@ function sha256Hex(ascii: string): string {
  * Returns a 64-character SHA-256 hex string.
  */
 export function generateSmsFingerprint(candidate: Omit<ParsedTransactionCandidate, 'rawSms' | 'warnings'>): string {
+    if(candidate.providerId==='cbe' && candidate.dateTime && Number.isFinite(Date.parse(candidate.dateTime))) {
+        return generateLegacySmsFingerprint({...candidate,dateTime:new Date(candidate.dateTime).toISOString()});
+    }
+    return generateLegacySmsFingerprint(candidate);
+}
+
+/** Read compatibility only: never change identities for providers outside this repair. */
+export function generateLegacySmsFingerprint(candidate: Omit<ParsedTransactionCandidate, 'rawSms' | 'warnings'>): string {
     const rawComponents = [
         candidate.providerId,
         candidate.type,
@@ -116,4 +124,17 @@ export function generateSmsFingerprint(candidate: Omit<ParsedTransactionCandidat
 
     const compositeString = rawComponents.join('|');
     return sha256Hex(compositeString);
+}
+
+export function cbeCompatibleFingerprints(candidate: ParsedTransactionCandidate): string[] {
+    if(candidate.providerId!=='cbe')return [generateSmsFingerprint(candidate)];
+    const epoch=Date.parse(candidate.dateTime ?? '');
+    const eat=Number.isFinite(epoch) ? new Date(epoch+10800000).toISOString().replace(/\.000Z$/,'').replace(/Z$/,'')+'+03:00':undefined;
+    return [...new Set([generateSmsFingerprint(candidate),generateLegacySmsFingerprint(candidate),
+        ...(eat ? [generateLegacySmsFingerprint({...candidate,dateTime:eat})]:[])])];
+}
+
+export function smsEvidenceHash(body:string):string {
+    const utf8=encodeURIComponent(body).replace(/%([0-9A-F]{2})/g,(_,hex)=>String.fromCharCode(parseInt(hex,16)));
+    return sha256Hex(utf8);
 }
